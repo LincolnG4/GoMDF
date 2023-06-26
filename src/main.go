@@ -80,13 +80,8 @@ func (hdBlock *HDBlock) init(reader *bufio.Reader) {
 
 	fmt.Println((hdBlock.ID[:]))
 	if errs != nil {
-		id := "##HD"
-		var byteArr [4]byte
-		for i := 0; i < len(id); i++ {
-			byteArr[i] = id[i]
-		}
-		hdBlock.ID = byteArr
 
+		copy(hdBlock.ID[:], []byte("##HD"))
 		hdBlock.Length = 0
 		hdBlock.LinkCount = 0
 		hdBlock.HDDGFirst = 0
