@@ -41,15 +41,6 @@ type HDBlock struct {
 	Reserved3   byte
 }
 
-func errorHandler(err error) {
-	if err != nil {
-		if err != io.EOF {
-			fmt.Println(err)
-		}
-
-	}
-}
-
 func (idBlock *IDBlock) init(reader *bufio.Reader) {
 
 	IDBLOCK_SIZE := 64
@@ -62,6 +53,7 @@ func (idBlock *IDBlock) init(reader *bufio.Reader) {
 
 	buffer := bytes.NewBuffer(buf)
 	errs := binary.Read(buffer, binary.LittleEndian, &(*idBlock))
+
 	if errs != nil {
 		copy(idBlock.IDFile[:], []byte("MDF     "))
 		copy(idBlock.IDVersion[:], []byte("4.00    "))
@@ -135,5 +127,14 @@ func main() {
 		hdBlock := HDBlock{}
 		_, err = file.Seek(0x40, 0)
 		hdBlock.init(reader)
+	}
+}
+
+func errorHandler(err error) {
+	if err != nil {
+		if err != io.EOF {
+			fmt.Println(err)
+		}
+
 	}
 }
