@@ -63,13 +63,12 @@ func (idBlock *IDBlock) init(reader *bufio.Reader) {
 	buffer := bytes.NewBuffer(buf)
 	errs := binary.Read(buffer, binary.LittleEndian, &(*idBlock))
 	if errs != nil {
-		var foo [8]byte
-		idBlock.IDFile = copy(foo[:], "MDF     ")
-		idBlock.IDVersion = copy(foo[:], "4.00    ")
-		idBlock.IDProgram = copy(foo[:], "GoMDF1.0")
-		idBlock.IDReserved1 = bytes.Repeat([]byte{0}, 4)
+		copy(idBlock.IDFile[:], []byte("MDF     "))
+		copy(idBlock.IDVersion[:], []byte("4.00    "))
+		copy(idBlock.IDProgram[:], []byte("GoMDF1.0"))
+		copy(idBlock.IDReserved1[:], bytes.Repeat([]byte{0}, 4))
 		idBlock.IDVersionNumber = 400
-		idBlock.IDReserved2 = bytes.Repeat([]byte{0}, 34)
+		copy(idBlock.IDReserved2[:], bytes.Repeat([]byte{0}, 34))
 	}
 }
 
@@ -120,7 +119,7 @@ func (hdBlock *HDBlock) init(reader *bufio.Reader) {
 
 func main() {
 
-	file, err := os.Open("samples/sample3.mf4")
+	file, err := os.Open("sample3.mf4")
 	errorHandler(err)
 	defer file.Close()
 
@@ -132,7 +131,7 @@ func main() {
 
 	idBlock.init(reader)
 
-	if idBlock.IDVersion > 400 {
+	if idBlock.IDVersionNumber > 400 {
 		hdBlock := HDBlock{}
 		_, err = file.Seek(0x40, 0)
 		hdBlock.init(reader)
