@@ -78,7 +78,6 @@ func (hdBlock *HDBlock) init(reader *bufio.Reader) {
 	fmt.Println(string(buf))
 	errs := binary.Read(buffer, binary.LittleEndian, &(*hdBlock))
 
-	fmt.Println((hdBlock.ID[:]))
 	if errs != nil {
 
 		copy(hdBlock.ID[:], []byte("##HD"))
@@ -106,23 +105,19 @@ func (hdBlock *HDBlock) init(reader *bufio.Reader) {
 
 func main() {
 
-	file, err := os.Open("sample3.mf4")
+	file, err := os.Open("samples/sample3.mf4")
 	errorHandler(err)
 	defer file.Close()
 
 	//Create IDBLOCK
-	idBlock := IDBlock{}
-	_, err = file.Seek(0, 0)
-
-	reader := bufio.NewReader(file)
-
-	idBlock.init(reader)
-
-	if idBlock.IDVersionNumber > 400 {
-		hdBlock := HDBlock{}
-		_, err = file.Seek(0x40, 0)
-		hdBlock.init(reader)
+	offset, err := file.Seek(0x40, 0)
+	buffer := make([]byte, 64) // Read 10 bytes
+	numBytesRead, err := file.Read(buffer)
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		return
 	}
+	fmt.Printf("Read %d bytes from address %d: %s\n", numBytesRead, offset, string(buffer))
 }
 
 func errorHandler(err error) {
