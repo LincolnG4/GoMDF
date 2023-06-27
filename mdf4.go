@@ -8,7 +8,7 @@ import (
 
 func main() {
 
-	file, err := os.Open("samples/sample3.mf4")
+	file, err := os.Open("samples/sample1.mf4")
 	errorHandler(err)
 	defer file.Close()
 
@@ -16,10 +16,17 @@ func main() {
 	idBlock := IDBlock{}
 	idBlock.init(file)
 
+	fmt.Printf("%+v\n", idBlock)
+
 	if idBlock.IDVersionNumber > 400 {
 		//Create HDBLOCK
 		hdBlock := HDBlock{}
 		hdBlock.init(file)
+
+		fmt.Printf("%+v\n", hdBlock)
+		fmt.Printf("%d \n", hdBlock.HDFHFirst)
+		buf := seekBinaryByAddress(file, hdBlock.HDFHFirst, 56)
+		fmt.Println(string(buf))
 
 	}
 
