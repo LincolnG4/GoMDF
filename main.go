@@ -9,8 +9,12 @@ import (
 )
 
 func main() {
-
-	file, err := os.Open("samples/sample1.mf4")
+	const (
+		FH_BLOCK_SIZE = 1
+	)
+	file, err := os.Open("samples/sample3.mf4")
+	fileInfo, _ := os.Stat("samples/sample3.mf4")
+	fileSize := fileInfo.Size()
 
 	if err != nil {
 		if err != io.EOF {
@@ -32,8 +36,27 @@ func main() {
 		hdBlock := HDBlock{}
 		hdBlock.init(file)
 
+		// read file history
+		fileHistoryAddr := hdBlock.HDFHFirst
+
+		fileHistory := make([]FHBlock, 0)
+		i := 0
+		for fileHistoryAddr != 1 {
+			if (fileHistoryAddr + FH_BLOCK_SIZE) > fileSize {
+				fmt.Println("File history address", fileHistoryAddr, "is outside the file size", fileSize)
+				break
+			}
+			fhBlock := FHBlock{}
+			fmt.Println(i)
+			fhBlock.historyBlock(file, fileHistoryAddr)
+			fileHistory = append(fileHistory, fhBlock)
+			fileHistoryAddr = fhBlock.FHNext
+			fmt.Println(fileHistoryAddr)
+			i++
+		}
+
 		fmt.Printf("%+v\n", hdBlock)
-		fmt.Printf("%d \n", hdBlock.HDFHFirst)
+		fmt.Printf("%d \n", len(fileHistory))
 
 	}
 
@@ -53,12 +76,12 @@ type HDBlock struct {
 	Reserved    [4]byte
 	Length      uint64
 	LinkCount   uint64
-	HDDGFirst   uint64
-	HDFHFirst   uint64
-	HDCHFirst   uint64
-	HDATFirst   uint64
-	HDEVFirst   uint64
-	HDMDComment uint64
+	HDDGFirst   int64
+	HDFHFirst   int64
+	HDCHFirst   int64
+	HDATFirst   int64
+	HDEVFirst   int64
+	HDMDComment int64
 	StartTime   uint64
 	TZOffset    int16
 	DSTOffset   int16
@@ -71,6 +94,20 @@ type HDBlock struct {
 	Reserved3   byte
 }
 
+type FHBlock struct {
+	ID             [4]byte
+	Reserved       [4]byte
+	Length         uint64
+	LinkCount      uint64
+	FHNext         int64
+	MDComment      uint64
+	FHTimeNS       uint64
+	FHTZOffsetMin  int16
+	FHDSTOffsetMin int16
+	FHTimeFlags    uint8
+	FHReserved     [3]byte
+}
+
 func (idBlock *IDBlock) init(file *os.File) {
 
 	var ADDRESS int64 = 0
@@ -78,7 +115,7 @@ func (idBlock *IDBlock) init(file *os.File) {
 
 	bytesValue := seekBinaryByAddress(file, ADDRESS, IDBLOCK_SIZE)
 	buffer := bytes.NewBuffer(bytesValue)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, &(*idBlock))
+	BinaryError := binary.Read(buffer, binary.LittleEndian, idBlock)
 
 	fmt.Println(string(bytesValue))
 
@@ -99,7 +136,7 @@ func (hdBlock *HDBlock) init(file *os.File) {
 
 	bytesValue := seekBinaryByAddress(file, ADDRESS, HDBLOCK_SIZE)
 	buffer := bytes.NewBuffer(bytesValue)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, &(*hdBlock))
+	BinaryError := binary.Read(buffer, binary.LittleEndian, hdBlock)
 	fmt.Println(string(bytesValue))
 
 	if BinaryError != nil {
@@ -123,6 +160,33 @@ func (hdBlock *HDBlock) init(file *os.File) {
 		hdBlock.StartAngle = 0
 		hdBlock.StartDist = 0
 		hdBlock.Reserved3 = 0
+	}
+
+}
+
+func (fhBlock *FHBlock) historyBlock(file *os.File, address int64) {
+
+	FHBLOCK_SIZE := 56
+
+	bytesValue := seekBinaryByAddress(file, address, FHBLOCK_SIZE)
+	buffer := bytes.NewBuffer(bytesValue)
+	BinaryError := binary.Read(buffer, binary.LittleEndian, fhBlock)
+	fmt.Println(string(bytesValue))
+	fmt.Printf("%+v\n", fhBlock)
+
+	if BinaryError != nil {
+		fmt.Println("ERROR", BinaryError)
+		copy(fhBlock.ID[:], []byte("##FH"))
+		copy(fhBlock.Reserved[:], bytes.Repeat([]byte{0}, 4))
+		fhBlock.Length = 56
+		fhBlock.LinkCount = 2
+		fhBlock.FHNext = 0
+		fhBlock.MDComment = 0
+		fhBlock.FHTimeNS = 0
+		fhBlock.FHTZOffsetMin = 0
+		fhBlock.FHTimeFlags = 0
+		fhBlock.FHDSTOffsetMin = 0
+		copy(fhBlock.FHReserved[:], bytes.Repeat([]byte{0}, 3))
 	}
 
 }
