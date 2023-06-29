@@ -10,10 +10,12 @@ import (
 
 func main() {
 	const (
-		FH_BLOCK_SIZE = 1
+		FH_BLOCK_SIZE = 56
+		AT_BLOCK_SIZE = 96
 	)
-	file, err := os.Open("samples/sample3.mf4")
-	fileInfo, _ := os.Stat("samples/sample3.mf4")
+	file, err := os.Open("/home/lincolng/Downloads/sample4.mf4")
+	fileInfo, _ := file.Stat()
+
 	fileSize := fileInfo.Size()
 
 	if err != nil {
@@ -38,25 +40,42 @@ func main() {
 
 		// read file history
 		fileHistoryAddr := hdBlock.HDFHFirst
-
 		fileHistory := make([]FHBlock, 0)
+		fmt.Println(fileHistoryAddr)
 		i := 0
-		for fileHistoryAddr != 1 {
+		for fileHistoryAddr != 0 {
 			if (fileHistoryAddr + FH_BLOCK_SIZE) > fileSize {
 				fmt.Println("File history address", fileHistoryAddr, "is outside the file size", fileSize)
 				break
 			}
 			fhBlock := FHBlock{}
-			fmt.Println(i)
+
 			fhBlock.historyBlock(file, fileHistoryAddr)
 			fileHistory = append(fileHistory, fhBlock)
 			fileHistoryAddr = fhBlock.FHNext
-			fmt.Println(fileHistoryAddr)
+
 			i++
 		}
 
-		fmt.Printf("%+v\n", hdBlock)
-		fmt.Printf("%d \n", len(fileHistory))
+		// read file history
+		attachmentAddr := hdBlock.HDATFirst
+		fmt.Println(attachmentAddr)
+		attachmentArray := make([]ATBlock, 0)
+		fmt.Println("READING ATTACHMENTS")
+		i = 0
+		for attachmentAddr != 0 {
+			if (attachmentAddr + AT_BLOCK_SIZE) > fileSize {
+				fmt.Println("File history address", attachmentAddr, "is outside the file size", fileSize)
+				break
+			}
+			atBlock := ATBlock{}
+
+			atBlock.attchmentBlock(file, attachmentAddr)
+			attachmentArray = append(attachmentArray, atBlock)
+			attachmentAddr = atBlock.ATNext
+
+			i++
+		}
 
 	}
 
@@ -108,6 +127,24 @@ type FHBlock struct {
 	FHReserved     [3]byte
 }
 
+type ATBlock struct {
+	ID           [4]byte
+	Reserved     [4]byte
+	Length       uint64
+	LinkCount    uint64
+	ATNext       int64
+	TXFilename   uint64
+	TXMimetype   uint64
+	MDComment    uint16
+	Flags        uint16
+	CreatorIndex uint16
+	ATReserved   [4]byte
+	MD5Checksum  [16]byte
+	OriginalSize uint64
+	EmbeddedSize uint64
+	EmbeddedData []byte
+}
+
 func (idBlock *IDBlock) init(file *os.File) {
 
 	var ADDRESS int64 = 0
@@ -117,7 +154,7 @@ func (idBlock *IDBlock) init(file *os.File) {
 	buffer := bytes.NewBuffer(bytesValue)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, idBlock)
 
-	fmt.Println(string(bytesValue))
+	//fmt.Println(string(bytesValue))
 
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
@@ -137,7 +174,7 @@ func (hdBlock *HDBlock) init(file *os.File) {
 	bytesValue := seekBinaryByAddress(file, ADDRESS, HDBLOCK_SIZE)
 	buffer := bytes.NewBuffer(bytesValue)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, hdBlock)
-	fmt.Println(string(bytesValue))
+	//fmt.Println(string(bytesValue))
 
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
@@ -174,6 +211,10 @@ func (fhBlock *FHBlock) historyBlock(file *os.File, address int64) {
 	fmt.Println(string(bytesValue))
 	fmt.Printf("%+v\n", fhBlock)
 
+	if string(fhBlock.ID[:]) != "##FH" {
+		fmt.Println("ERROR NOT FH")
+	}
+
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 		copy(fhBlock.ID[:], []byte("##FH"))
@@ -187,6 +228,33 @@ func (fhBlock *FHBlock) historyBlock(file *os.File, address int64) {
 		fhBlock.FHTimeFlags = 0
 		fhBlock.FHDSTOffsetMin = 0
 		copy(fhBlock.FHReserved[:], bytes.Repeat([]byte{0}, 3))
+	}
+
+}
+
+func (atBlock *ATBlock) attchmentBlock(file *os.File, address int64) {
+
+	BLOCK_SIZE := 96
+
+	bytesValue := seekBinaryByAddress(file, address, BLOCK_SIZE)
+	buffer := bytes.NewBuffer(bytesValue)
+	fmt.Println(string(bytesValue))
+	BinaryError := binary.Read(buffer, binary.LittleEndian, atBlock)
+	fmt.Println(string(bytesValue))
+	fmt.Printf("%+v\n", atBlock)
+
+	if string(atBlock.ID[:]) != "##AT" {
+		fmt.Println("ERROR NOT AT")
+	}
+
+	if BinaryError != nil {
+		fmt.Println("ERROR", BinaryError)
+		copy(atBlock.ID[:], []byte("##AT"))
+		copy(atBlock.Reserved[:], bytes.Repeat([]byte{0}, 4))
+		atBlock.Length = 96
+		atBlock.LinkCount = 2
+		atBlock.ATNext = 0
+
 	}
 
 }
