@@ -11,7 +11,10 @@ func main() {
 	const (
 		FH_BLOCK_SIZE = 56
 		AT_BLOCK_SIZE = 96
+		DG_BLOCK_SIZE = 64
+		CG_BLOCK_SIZE = 104
 	)
+
 	file, err := os.Open("/home/lincolng/Downloads/sample4.mf4")
 	fileInfo, _ := file.Stat()
 
@@ -40,7 +43,6 @@ func main() {
 		// read file history
 		fileHistoryAddr := hdBlock.HDFHFirst
 		fileHistory := make([]FHBlock, 0)
-		fmt.Println(fileHistoryAddr)
 		i := 0
 		for fileHistoryAddr != 0 {
 			if (fileHistoryAddr + FH_BLOCK_SIZE) > fileSize {
@@ -58,9 +60,8 @@ func main() {
 
 		// read file history
 		attachmentAddr := hdBlock.HDATFirst
-		fmt.Println(attachmentAddr)
 		attachmentArray := make([]ATBlock, 0)
-		fmt.Println("READING ATTACHMENTS")
+
 		i = 0
 		for attachmentAddr != 0 {
 			if (attachmentAddr + AT_BLOCK_SIZE) > fileSize {
@@ -74,6 +75,43 @@ func main() {
 			attachmentAddr = atBlock.ATNext
 
 			i++
+		}
+
+		datagroupAddress := hdBlock.HDDGFirst
+		datagroupArray := make([]DGBlock, 0)
+
+		i = 0
+		for datagroupAddress != 0 {
+			if (datagroupAddress + DG_BLOCK_SIZE) > fileSize {
+				fmt.Println("File history address", datagroupAddress, "is outside the file size", fileSize)
+				break
+			}
+			dgBlock := DGBlock{}
+			dgBlock.dataBlock(file, datagroupAddress)
+			recordIDNr := dgBlock.RecIDSize
+
+			// go to first channel group of the current data group
+			chanelgroupAddress := dgBlock.CGNext
+			firstCGAddress := chanelgroupAddress
+
+			cgNR := 0
+			cgSize := make([]int, 0)
+
+			for chanelgroupAddress != 0 {
+				if (chanelgroupAddress + CG_BLOCK_SIZE) > fileSize {
+					fmt.Println("File history address", chanelgroupAddress, "is outside the file size", fileSize)
+					break
+				}
+				cgNR += 1
+				//if cg_addr == firstCGAddress {
+				//	grp = Group(group)
+				//} else {
+				//	grp = Group(group.copy())
+				//}
+				fmt.Println(recordIDNr, firstCGAddress, cgSize, datagroupArray)
+				break
+			}
+			break
 		}
 
 	}
