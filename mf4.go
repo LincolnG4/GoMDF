@@ -97,9 +97,9 @@ func main() {
 			firstCGAddress := chanelgroupAddress
 
 			cgNR := 0
-			cgSize := make([]uint64, 0)
+			cgSize := make(map[uint64]uint32, 0)
 			dgCount := 0
-
+			currentCgIndex := 0
 			for chanelgroupAddress != 0 {
 				if (chanelgroupAddress + CG_BLOCK_SIZE) > fileSize {
 					fmt.Println("File history address", chanelgroupAddress, "is outside the file size", fileSize)
@@ -121,7 +121,8 @@ func main() {
 					ReadSplitCount:          0,
 					DataBlocksInfoGenerator: []uint64{},
 					ChannelGroup:            CGBlock{},
-					RecordSize:              []uint64{},
+					RecordSize:              map[uint64]uint32{},
+					Sorted:                  false,
 				}
 
 				//}
@@ -137,24 +138,37 @@ func main() {
 				fmt.Println(channelGroup)
 				grp.RecordSize = cgSize
 
-				// if channelGroup.Flags&1 != 0 {
-				// 	// VLDS flag
-				// 	recordID := channelGroup.RecordID
-				// 	cgSize[recordID] = 0
-				// } else if channelGroup.Flags&(1<<1) != 0 {
-				// 	samplesSize := channelGroup.SamplesByteNr
-				// 	invalSize := channelGroup.InvalidationBytesNr
-				// 	recordID := channelGroup.RecordID
-				// 	cgSize[recordID] = samplesSize + invalSize
-				// } else {
-				// 	// In case no `cg_flags` are set
-				// 	samplesSize := channelGroup.SamplesByteNr
-				// 	invalSize := channelGroup.InvalidationBytesNr
-				// 	recordID := channelGroup.RecordID
-				// 	cgSize[recordID] = samplesSize + invalSize
-				// }
+				if channelGroup.Flags&1 != 0 {
+					// VLDS flag
+					recordID := channelGroup.RecordId
+					cgSize[recordID] = 0
+				} else {
+					// In case no `cg_flags` are set
+					samplesSize := channelGroup.DataBytes
+					invalSize := channelGroup.InvalBytes
+					recordID := channelGroup.RecordId
+					cgSize[recordID] = samplesSize + invalSize
+				}
+
+				if recordIDNr != 0 {
+					grp.Sorted = false
+				} else {
+					grp.Sorted = true
+				}
+
+				channelAddress := channelGroup.CNNext
+				chCounter := 0
+
+				fmt.Println(channelAddress, chCounter)
+				// self._read_channels(
+				//     ch_addr, grp, stream, dg_cntr, ch_cntr, mapped=mapped
+				// )
+
+				chanelgroupAddress = channelGroup.CGNext
 
 				dgCount += 1
+				currentCgIndex += 1
+
 				break
 			}
 			break

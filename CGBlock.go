@@ -12,7 +12,7 @@ type CGBlock struct {
 	Reserved    [4]byte
 	Length      uint64
 	LinkCount   uint64
-	CGNext      uint64
+	CGNext      int64
 	CNNext      uint64
 	TxAcqName   int64
 	SiAcqSource uint64
@@ -40,7 +40,8 @@ type Group struct {
 	ReadSplitCount          int
 	DataBlocksInfoGenerator []uint64
 	ChannelGroup            CGBlock
-	RecordSize              []uint64
+	RecordSize              map[uint64]uint32
+	Sorted                  bool
 }
 
 func (cgBlock *CGBlock) channelBlock(file *os.File, address int64) {
