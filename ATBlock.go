@@ -27,7 +27,7 @@ type ATBlock struct {
 
 func (atBlock *ATBlock) attchmentBlock(file *os.File, address int64) {
 
-	BLOCK_SIZE := 96
+	const BLOCK_SIZE = 96
 
 	bytesValue := seekBinaryByAddress(file, address, BLOCK_SIZE)
 	buffer := bytes.NewBuffer(bytesValue)

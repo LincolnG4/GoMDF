@@ -22,7 +22,7 @@ type DGBlock struct {
 
 func (dgBlock *DGBlock) dataBlock(file *os.File, address int64) {
 
-	BLOCK_SIZE := 64
+	const BLOCK_SIZE = 64
 
 	bytesValue := seekBinaryByAddress(file, address, BLOCK_SIZE)
 	buffer := bytes.NewBuffer(bytesValue)

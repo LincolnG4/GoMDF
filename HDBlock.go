@@ -32,7 +32,7 @@ type HDBlock struct {
 
 func (hdBlock *HDBlock) init(file *os.File) {
 	var ADDRESS int64 = 64
-	HDBLOCK_SIZE := 104
+	const HDBLOCK_SIZE = 104
 
 	bytesValue := seekBinaryByAddress(file, ADDRESS, HDBLOCK_SIZE)
 	buffer := bytes.NewBuffer(bytesValue)

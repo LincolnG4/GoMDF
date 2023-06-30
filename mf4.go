@@ -15,6 +15,8 @@ func main() {
 		CG_BLOCK_SIZE = 104
 	)
 
+	cgMAP := make(map[int64]int, 0)
+
 	file, err := os.Open("/home/lincolng/Downloads/sample4.mf4")
 	fileInfo, _ := file.Stat()
 
@@ -95,7 +97,8 @@ func main() {
 			firstCGAddress := chanelgroupAddress
 
 			cgNR := 0
-			cgSize := make([]int, 0)
+			cgSize := make([]uint64, 0)
+			dgCount := 0
 
 			for chanelgroupAddress != 0 {
 				if (chanelgroupAddress + CG_BLOCK_SIZE) > fileSize {
@@ -103,12 +106,55 @@ func main() {
 					break
 				}
 				cgNR += 1
-				//if cg_addr == firstCGAddress {
-				//	grp = Group(group)
-				//} else {
-				//	grp = Group(group.copy())
+				//if chanelgroupAddress == firstCGAddress {
+				grp := Group{
+					DataGroup:               &dgBlock,
+					Channels:                []uint64{},
+					ChannelDependencies:     []uint64{},
+					SignalData:              []uint64{},
+					Record:                  0,
+					Trigger:                 0,
+					StringDtypes:            0,
+					DataBlocks:              []uint64{},
+					SingleChannelDtype:      0,
+					UsesId:                  false,
+					ReadSplitCount:          0,
+					DataBlocksInfoGenerator: []uint64{},
+					ChannelGroup:            CGBlock{},
+					RecordSize:              []uint64{},
+				}
+
 				//}
 				fmt.Println(recordIDNr, firstCGAddress, cgSize, datagroupArray)
+
+				channelBlock := CGBlock{}
+				channelBlock.channelBlock(file, chanelgroupAddress)
+
+				cgMAP[chanelgroupAddress] = dgCount
+
+				grp.ChannelGroup = channelBlock
+				channelGroup := grp.ChannelGroup
+				fmt.Println(channelGroup)
+				grp.RecordSize = cgSize
+
+				// if channelGroup.Flags&1 != 0 {
+				// 	// VLDS flag
+				// 	recordID := channelGroup.RecordID
+				// 	cgSize[recordID] = 0
+				// } else if channelGroup.Flags&(1<<1) != 0 {
+				// 	samplesSize := channelGroup.SamplesByteNr
+				// 	invalSize := channelGroup.InvalidationBytesNr
+				// 	recordID := channelGroup.RecordID
+				// 	cgSize[recordID] = samplesSize + invalSize
+				// } else {
+				// 	// In case no `cg_flags` are set
+				// 	samplesSize := channelGroup.SamplesByteNr
+				// 	invalSize := channelGroup.InvalidationBytesNr
+				// 	recordID := channelGroup.RecordID
+				// 	cgSize[recordID] = samplesSize + invalSize
+				// }
+
+				dgCount += 1
 				break
 			}
 			break
@@ -116,23 +162,4 @@ func main() {
 
 	}
 
-}
-
-func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
-	buf := make([]byte, block_size)
-	_, errs := file.Seek(address, 0)
-	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs)
-		}
-
-	}
-	_, err := file.Read(buf)
-	if err != nil {
-		if err != io.EOF {
-			fmt.Println(err)
-		}
-
-	}
-	return buf
 }

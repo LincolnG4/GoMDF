@@ -23,7 +23,7 @@ type FHBlock struct {
 
 func (fhBlock *FHBlock) historyBlock(file *os.File, address int64) {
 
-	FHBLOCK_SIZE := 56
+	const FHBLOCK_SIZE = 56
 
 	bytesValue := seekBinaryByAddress(file, address, FHBLOCK_SIZE)
 	buffer := bytes.NewBuffer(bytesValue)

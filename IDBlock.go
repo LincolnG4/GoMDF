@@ -19,7 +19,7 @@ type IDBlock struct {
 func (idBlock *IDBlock) init(file *os.File) {
 
 	var ADDRESS int64 = 0
-	IDBLOCK_SIZE := 64
+	const IDBLOCK_SIZE = 64
 
 	bytesValue := seekBinaryByAddress(file, ADDRESS, IDBLOCK_SIZE)
 	buffer := bytes.NewBuffer(bytesValue)
