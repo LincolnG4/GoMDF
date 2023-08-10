@@ -1,4 +1,4 @@
-# GoMDF
+# GoMDF - ASAM MDF for Golang
 ASAM MDF / MF4 (Measurement Data Format) files editor in GoLang
 Library based on <https://github.com/danielhrisca/asammdf> 
 
