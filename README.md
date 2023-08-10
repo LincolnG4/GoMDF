@@ -1,5 +1,7 @@
 # GoMDF
 ASAM MDF / MF4 (Measurement Data Format) files editor in GoLang
+Library based on <https://github.com/danielhrisca/asammdf> 
+
 
 ## **Targets / Tasks** :  
 - [ ] Read MF4 Files  
