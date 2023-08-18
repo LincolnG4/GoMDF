@@ -2,188 +2,184 @@ package mdf
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
+	"github.com/davecgh/go-spew/spew"
 )
-const (
-		FH_BLOCK_SIZE = 56
-		AT_BLOCK_SIZE = 96
-		DG_BLOCK_SIZE = 64
-		CG_BLOCK_SIZE = 104
-		COMMON_SIZE = 24
-	)
 
-func OpenFile(file *os.File) {
+type MF4 struct {
+	FH map[int]*blocks.FH
+	AT map[int]*blocks.AT
+	//EV map[int]*blocks.EVblock
+	//CH map[int]*blocks.CHBlock
+	DG map[int]*blocks.DG
+	CG map[int]*blocks.CG
+}
 
-	
-	
-  cgMAP := make(map[int64]int, 0)
+func ReadFile(file *os.File) {
+	var startAddress int64 = 0
+	var previousBlock int
+	//fileInfo, _ := file.Stat()
+	//fileSize := fileInfo.Size()
 
-	
-	fileInfo, _ := file.Stat()
+	//Get IDBLOCK
+	idBlock := blocks.ID{}
+	idBlock.NewBlock(file, startAddress, blocks.IDBLOCK_SIZE)
 
-	fileSize := fileInfo.Size()
+	previousBlock = blocks.IDBLOCK_SIZE
 
-	
+	fmt.Printf("%s %s %s %s %d %s \n", idBlock.File,
+		idBlock.Version,
+		idBlock.Program,
+		idBlock.Reserved1,
+		idBlock.VersionNumber,
+		idBlock.Reserved2)
 
-	//Create IDBLOCK
-	idBlock := blocks.IDBlock{}
-	idBlock.NewBlock(file)
-	
-	fmt.Printf("%+v\n", idBlock)
+	//Create MF4 struct from the file
+	mf4File := MF4{}
 
-	if idBlock.IDVersionNumber > 400 {
-		//Create HDBLOCK
-		hdBlock := blocks.HDBlock{}
-		hdBlock.NewBlock(file)
+	//Get HDBLOCK
+	startAddress += int64(previousBlock)
 
-		// read file history
-		fileHistoryAddr := hdBlock.HDFHFirst
-		fileHistory := make([]blocks.FHBlock, 0)
-		i := 0
-		for fileHistoryAddr != 0 {
-			if (fileHistoryAddr + FH_BLOCK_SIZE) > fileSize {
-				fmt.Println("File history address", fileHistoryAddr, "is outside the file size", fileSize)
-				break
-			}
-			fhBlock := blocks.FHBlock{}
+	hdBlock := blocks.HD{}
+	hdBlock.NewBlock(file, startAddress, blocks.HDBLOCK_SIZE)
 
-			fhBlock.HistoryBlock(file, fileHistoryAddr)
-			fileHistory = append(fileHistory, fhBlock)
-			fileHistoryAddr = fhBlock.FHNext
+	fmt.Printf("%s\n", hdBlock.ID)
+	fmt.Printf("%+v\n\n", hdBlock)
 
-			i++
-		}
+	//From HDBLOCK read File History
+	startAddressFH := hdBlock.FHFirst
 
-		// read file history
-		attachmentAddr := hdBlock.HDATFirst
-		attachmentArray := make([]blocks.ATBlock, 0)
+	//Get all File History
+	fmt.Println("##FH")
+	mf4File.LoadFileHistory(file, startAddressFH)
 
-		i = 0
-		for attachmentAddr != 0 {
-			if (attachmentAddr + AT_BLOCK_SIZE) > fileSize {
-				fmt.Println("File history address", attachmentAddr, "is outside the file size", fileSize)
-				break
-			}
-			atBlock := blocks.ATBlock{}
+	//From HDBLOCK read Attachments
+	fmt.Println("##AT")
+	startAddressAT := hdBlock.ATFirst
 
-			atBlock.AttchmentBlock(file, attachmentAddr)
-			attachmentArray = append(attachmentArray, atBlock)
-			attachmentAddr = atBlock.ATNext
+	//Get all File History
+	mf4File.LoadAttachmemt(file, startAddressAT)
+	fmt.Printf("%+v\n\n", mf4File.AT)
 
-			i++
-		}
+	//From HDBLOCK read DataGroup
+	NextAddressDG := hdBlock.DGFirst
+	index := 0
+	mapDG := make(map[int]*blocks.DG)
 
-		datagroupAddress := hdBlock.HDDGFirst
-		datagroupArray := make([]blocks.DGBlock, 0)
+	//Get all DataGroup
+	for NextAddressDG != 0 {
+		dgBlock := blocks.DG{}
+		dgBlock.NewBlock(file, NextAddressDG, blocks.DGBLOCK_SIZE)
 
-		i = 0
-		for datagroupAddress != 0 {
-			if (datagroupAddress + DG_BLOCK_SIZE) > fileSize {
-				fmt.Println("File history address", datagroupAddress, "is outside the file size", fileSize)
-				break
-			}
-			dgBlock := blocks.DGBlock{}
-			dgBlock.NewBlock(file, datagroupAddress)
-			recordIDNr := dgBlock.RecIDSize
+		mapDG[index] = &dgBlock
+		mf4File.DG = mapDG
+		fmt.Printf("%s\n", dgBlock.ID)
+		fmt.Printf("%+v\n\n", dgBlock)
 
-			// go to first channel group of the current data group
-			chanelgroupAddress := dgBlock.CGNext
-			firstCGAddress := chanelgroupAddress
+		//From DGBLOCK read ChannelGroup
+		NextAddressCG := dgBlock.CGNext
+		indexCG := 0
+		mapCG := make(map[int]*blocks.CG)
 
-			cgNR := 0
-			cgSize := make(map[uint64]uint32, 0)
-			dgCount := 0
-			currentCgIndex := 0
-			for chanelgroupAddress != 0 {
-				if (chanelgroupAddress + CG_BLOCK_SIZE) > fileSize {
-					fmt.Println("File history address", chanelgroupAddress, "is outside the file size", fileSize)
-					break
-				}
-				cgNR += 1
-				//if chanelgroupAddress == firstCGAddress {
-				grp := blocks.Group{
-					DataGroup:               &dgBlock,
-					Channels:                []uint64{},
-					ChannelDependencies:     []uint64{},
-					SignalData:              []uint64{},
-					Record:                  0,
-					Trigger:                 0,
-					StringDtypes:            0,
-					DataBlocks:              []uint64{},
-					SingleChannelDtype:      0,
-					UsesId:                  false,
-					ReadSplitCount:          0,
-					DataBlocksInfoGenerator: []uint64{},
-					ChannelGroup:            blocks.CGBlock{},
-					RecordSize:              map[uint64]uint32{},
-					Sorted:                  false,
-				}
+		for NextAddressCG != 0 {
+			cgBlock := blocks.CG{}
+			cgBlock.NewBlock(file, NextAddressCG, blocks.CGBLOCK_SIZE)
 
-				//}
-				fmt.Println(recordIDNr, firstCGAddress, cgSize, datagroupArray)
+			mapCG[indexCG] = &cgBlock
+			mf4File.CG = mapCG
+			fmt.Printf("%s\n", cgBlock.ID)
+			fmt.Printf("%+v\n\n", cgBlock)
 
-				channelBlock := blocks.CGBlock{}
-				channelBlock.ChannelBlock(file, chanelgroupAddress)
+			//debug(file, cgBlock.TxAcqName, 88)
+			//From CGBLOCK read Channel
+			nextAddressCN := cgBlock.CNNext
+			indexCN := 0
 
-				cgMAP[chanelgroupAddress] = dgCount
+			// mapCN := make(map[int]*blocks.CG)
+			for nextAddressCN != 0 {
+				cnBlock := blocks.CN{}
 
-				grp.ChannelGroup = channelBlock
-				channelGroup := grp.ChannelGroup
-				fmt.Println(channelGroup)
-				grp.RecordSize = cgSize
-
-				if channelGroup.Flags&1 != 0 {
-					// VLDS flag
-					recordID := channelGroup.RecordId
-					cgSize[recordID] = 0
-				} else {
-					// In case no `cg_flags` are set
-					samplesSize := channelGroup.DataBytes
-					invalSize := channelGroup.InvalBytes
-					recordID := channelGroup.RecordId
-					cgSize[recordID] = samplesSize + invalSize
-				}
-
-				if recordIDNr != 0 {
-					grp.Sorted = false
-				} else {
-					grp.Sorted = true
-				}
-
-				channelAddress := channelGroup.CNNext
-				chCount := 0
-
-				fmt.Println(channelAddress, chCount)
-
-				readChannels(channelAddress ,grp ,dgCount, chCount, fileSize)
-			
-				chanelgroupAddress = channelGroup.CGNext
+				cnBlock.NewBlock(file, nextAddressCN)
+				fmt.Printf("%+v\n\n", cnBlock)
 				
-				dgCount += 1
-				currentCgIndex += 1
-				fmt.Print(chanelgroupAddress)
-				break
+				txBlock := blocks.TX{}
+				//debug(file,int64(cnBlock.TxName),80)
+				txBlock.NewBlock(file, int64(cnBlock.TxName), 50)
+				//blocks.GetText(file, cnBlock.TxName, 100)
+
+				fmt.Printf("%s\n", cnBlock.ID)
+				fmt.Printf("%+v\n\n", cnBlock)
+
+				nextAddressCN = cnBlock.CnNext
+				indexCN++
 			}
-			//break
+
+			NextAddressCG = cgBlock.CGNext
+			indexCG++
 		}
 
+		NextAddressDG = dgBlock.DGNext
+		index++
+	}
+	fmt.Printf("%+v\n", mf4File.DG)
+
+}
+
+func (m *MF4) LoadAttachmemt(file *os.File, startAddressAT int64) {
+	var index int = 0
+	mapAT := make(map[int]*blocks.AT)
+	nextAddressAT := startAddressAT
+
+	for nextAddressAT != 0 {
+		atBlock := blocks.AT{}
+		atBlock.NewBlock(file, nextAddressAT, blocks.ATBLOCK_SIZE)
+
+		mapAT[index] = &atBlock
+		m.AT = mapAT
+		fmt.Printf("%s\n", atBlock.ID)
+		fmt.Printf("%+v\n\n", atBlock)
+
+		nextAddressAT = atBlock.ATNext
+		index++
 	}
 
 }
 
+func (m *MF4) LoadFileHistory(file *os.File, startAddressFH int64) {
+	var index int = 0
+	mapFH := make(map[int]*blocks.FH)
+	nextAddressFH := startAddressFH
 
-func readChannels(channelAddress uint64,grp blocks.Group,dgCount int, chCount int, fileSize int64) {
-	//channels := grp.Channels
-	//dependencies := grp.ChannelDependencies
+	for nextAddressFH != 0 {
+		fhBlock := blocks.FH{}
+		fhBlock.NewBlock(file, nextAddressFH, blocks.FHBLOCK_SIZE)
 
-	for channelAddress != 0 {
+		mapFH[index] = &fhBlock
+		m.FH = mapFH
+		fmt.Printf("%+v\n\n", fhBlock)
 
-		if (channelAddress + COMMON_SIZE) > uint64(fileSize) {
-			fmt.Println("Channel address is outside the file size ")
-                break
-		}
-             
+		nextAddressFH = fhBlock.FHNext
+		index++
 	}
+
+}
+
+func debug(file *os.File, offset int64, size int) {
+	_, err := file.Seek(int64(offset), io.SeekStart)
+	if err != nil {
+		panic(err)
+	}
+	buf := make([]byte, size)
+	n, err := file.Read(buf[:cap(buf)])
+	buf = buf[:n]
+	if err != nil {
+		if err != io.EOF {
+			panic(err)
+		}
+	}
+	spew.Dump(buf)
+
 }
