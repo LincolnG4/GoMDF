@@ -1,4 +1,4 @@
-package main
+package mf4
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ type MF4 struct {
 	CG map[int]*blocks.CG
 }
 
-func ReadFile(file *os.File, getXML bool) {
+func (mf4 *MF4) ReadFile(file *os.File, getXML bool) {
 	var startAddress int64 = 0
 	var previousBlock int
 	//fileInfo, _ := file.Stat()
