@@ -18,7 +18,7 @@ type MF4 struct {
 	CG map[int]*blocks.CG
 }
 
-func (mf4 *MF4) ReadFile(file *os.File, getXML bool) {
+func ReadFile(file *os.File, getXML bool) *MF4 {
 	var startAddress int64 = 0
 	var previousBlock int
 	//fileInfo, _ := file.Stat()
@@ -140,7 +140,7 @@ func (mf4 *MF4) ReadFile(file *os.File, getXML bool) {
 		index++
 	}
 	fmt.Printf("%+v\n", mf4File.DG)
-
+	return &mf4File
 }
 
 func (m *MF4) LoadAttachmemt(file *os.File, startAddressAT int64) {

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	mf4 "github.com/LincolnG4/GoMDF"
 )
 
 func main() {
-	file, err := os.Open("sample3.mf4")
+	file, err := os.Open("../../samples/sample3.mf4")
 
 	if err != nil {
 		if err != io.EOF {
@@ -19,5 +21,7 @@ func main() {
 
 	defer file.Close()
 	
+	mf4 := mf4.ReadFile(file,true)
+	fmt.Printf("%+v",mf4)
 }
 
