@@ -7,10 +7,7 @@ import (
 )
 
 type CG struct {
-	ID          [4]byte
-	Reserved    [4]byte
-	Length      uint64
-	LinkCount   uint64
+	Header      Header
 	CGNext      int64
 	CNNext      int64
 	TxAcqName   int64
@@ -47,8 +44,8 @@ func (b *CG) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 
-	if string(b.ID[:]) != CG_ID {
-		fmt.Printf("ERROR NOT %s", CG_ID)
+	if string(b.Header.ID[:]) != CgID {
+		fmt.Printf("ERROR NOT %s", CgID)
 	}
 
 	if BinaryError != nil {
@@ -60,10 +57,12 @@ func (b *CG) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
 func (b *CG) BlankBlock() CG {
 	return CG{
-		ID:          [4]byte{'#', '#', 'C', 'G'},
-		Reserved:    [4]byte{},
-		Length:      0,
-		LinkCount:   0,
+		Header: Header{
+			ID:        [4]byte{'#', '#', 'C', 'G'},
+			Reserved:  [4]byte{},
+			Length:    0,
+			LinkCount: 0,
+		},
 		CGNext:      0,
 		CNNext:      0,
 		TxAcqName:   0,

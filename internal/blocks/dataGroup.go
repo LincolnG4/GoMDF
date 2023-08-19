@@ -7,10 +7,7 @@ import (
 )
 
 type DG struct {
-	ID         [4]byte
-	Reserved   [4]byte
-	Length     uint64
-	LinkCount  uint64
+	Header     Header
 	DGNext     int64
 	CGNext     int64
 	DATA       uint64
@@ -23,8 +20,8 @@ func (b *DG) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 
-	if string(b.ID[:]) != DG_ID {
-		fmt.Printf("ERROR NOT %s", DG_ID)
+	if string(b.Header.ID[:]) != DgID {
+		fmt.Printf("ERROR NOT %s", DgID)
 	}
 
 	if BinaryError != nil {
@@ -36,10 +33,12 @@ func (b *DG) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
 func (b *DG) BlankBlock() DG {
 	return DG{
-		ID:         [4]byte{'#', '#', 'D', 'G'},
-		Reserved:   [4]byte{},
-		Length:     64,
-		LinkCount:  4,
+		Header: Header{
+			ID:        [4]byte{'#', '#', 'D', 'G'},
+			Reserved:  [4]byte{},
+			Length:    64,
+			LinkCount: 4,
+		},
 		DGNext:     0,
 		CGNext:     0,
 		DATA:       0,

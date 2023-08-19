@@ -9,10 +9,7 @@ import (
 )
 
 type CN struct {
-	ID            [4]byte
-	Reserved0     [4]byte
-	Length        uint64
-	LinkCount     uint64
+	Header        Header
 	CnNext        int64
 	CnComposition uint64
 	TxName        uint64
@@ -38,11 +35,11 @@ type CN struct {
 }
 
 func (b *CN) NewBlock(file *os.File, startAdress int64) {
-	buffer := NewBufferCN(file, startAdress, CNBLOCK_SIZE)
+	buffer := NewBufferCN(file, startAdress, CnblockSize)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
-	fmt.Println(string(b.ID[:]))
-	if string(b.ID[:]) != CN_ID {
-		fmt.Printf("ERROR NOT %s", CN_ID)
+	fmt.Println(string(b.Header.ID[:]))
+	if string(b.Header.ID[:]) != CnID {
+		fmt.Printf("ERROR NOT %s", CnID)
 		panic(BinaryError)
 	}
 

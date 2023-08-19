@@ -7,10 +7,7 @@ import (
 )
 
 type HD struct {
-	ID         [4]byte
-	Reserved   [4]byte
-	Length     uint64
-	LinkCount  uint64
+	Header     Header
 	DGFirst    int64
 	FHFirst    int64
 	CHFirst    int64
@@ -41,9 +38,11 @@ func (b *HD) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
 func (b *HD) BlankBlock() HD {
 	return HD{
-		ID:         [4]byte{'#', '#', 'H', 'D'},
-		Length:     104,
-		LinkCount:  6,
+		Header: Header{
+			ID:        [4]byte{'#', '#', 'H', 'D'},
+			Length:    104,
+			LinkCount: 6,
+		},
 		DGFirst:    0,
 		FHFirst:    0,
 		CHFirst:    0,

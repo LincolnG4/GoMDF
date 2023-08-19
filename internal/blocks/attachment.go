@@ -7,10 +7,7 @@ import (
 )
 
 type AT struct {
-	ID           [4]byte
-	Reserved     [4]byte
-	Length       uint64
-	LinkCount    uint64
+	Header       Header
 	ATNext       int64
 	TXFilename   uint64
 	TXMimetype   uint64
@@ -29,8 +26,8 @@ func (b *AT) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 
-	if string(b.ID[:]) != AT_ID {
-		fmt.Printf("ERROR NOT %s", AT_ID)
+	if string(b.Header.ID[:]) != AtID {
+		fmt.Printf("ERROR NOT %s", AtID)
 	}
 
 	if BinaryError != nil {
@@ -42,10 +39,12 @@ func (b *AT) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
 func (b *AT) BlankBlock() AT {
 	return AT{
-		ID:        [4]byte{'#', '#', 'A', 'T'},
-		Reserved:  [4]byte{},
-		Length:    96,
-		LinkCount: 2,
-		ATNext:    0,
+		Header: Header{
+			ID:        [4]byte{'#', '#', 'A', 'T'},
+			Reserved:  [4]byte{},
+			Length:    96,
+			LinkCount: 2,
+		},
+		ATNext: 0,
 	}
 }

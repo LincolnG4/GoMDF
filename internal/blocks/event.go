@@ -7,10 +7,7 @@ import (
 )
 
 type EV struct {
-	ID              [4]byte
-	Reserved        [4]byte
-	Length          uint64
-	LinkCount       uint64
+	Header          Header
 	EVNext          int64
 	EVParent        uint64
 	EVRange         uint64
@@ -36,8 +33,8 @@ func (b *EV) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 
-	if string(b.ID[:]) != EV_ID {
-		fmt.Printf("ERROR NOT %s", EV_ID)
+	if string(b.Header.ID[:]) != EvID {
+		fmt.Printf("ERROR NOT %s", EvID)
 	}
 
 	if BinaryError != nil {
@@ -49,22 +46,24 @@ func (b *EV) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
 func (b *EV) BlankBlock() EV {
 	return EV{
-		// ID:              [4]byte{'#', '#', 'E', 'V'},
-		// Reserved:        [4]byte,
-		// Length:          0,
-		// LinkCount:       0,
+		Header: Header{
+			ID: [4]byte{'#', '#', 'E', 'V'},
+			// Reserved:  [4]byte{},
+			// Length:    0,
+			// LinkCount: 0,
+		},
 		// EVNext:          0,
 		// EVParent:        0,
 		// EVRange:         0,
 		// TXName:          0,
 		// MDComment:       0,
 		// Scope:           0,
-		// ATReference:     0,
+		// ATReference:     [4]byte{},
 		// Type:            0,
 		// SyncType:        0,
 		// RangeType:       0,
 		// Flags:           0,
-		// Reserved1:       0,
+		// Reserved1:       [3]byte{},
 		// ScopeCount:      0,
 		// AttachmentCount: 0,
 		// CreatorIndex:    0,

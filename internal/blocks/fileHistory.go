@@ -7,10 +7,7 @@ import (
 )
 
 type FH struct {
-	ID             [4]byte
-	Reserved       [4]byte
-	Length         uint64
-	LinkCount      uint64
+	Header         Header
 	FHNext         int64
 	MDComment      uint64
 	FHTimeNS       uint64
@@ -25,8 +22,9 @@ func (b *FH) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 
-	if string(b.ID[:]) != "##FH" {
+	if string(b.Header.ID[:]) != FgID {
 		fmt.Println("ERROR NOT FH")
+		panic(BinaryError)
 	}
 
 	if BinaryError != nil {
@@ -38,10 +36,12 @@ func (b *FH) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
 func (b *FH) BlankBlock() FH {
 	return FH{
-		ID:             [4]byte{'#', '#', 'F', 'H'},
-		Reserved:       [4]byte{},
-		Length:         56,
-		LinkCount:      2,
+		Header: Header{
+			ID:        [4]byte{'#', '#', 'F', 'H'},
+			Reserved:  [4]byte{},
+			Length:    56,
+			LinkCount: 2,
+		},
 		FHNext:         0,
 		MDComment:      0,
 		FHTimeNS:       0,

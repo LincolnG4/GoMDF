@@ -1,4 +1,4 @@
-package mdf
+package main
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ type MF4 struct {
 	CG map[int]*blocks.CG
 }
 
-func ReadFile(file *os.File) {
+func ReadFile(file *os.File, getXML bool) {
 	var startAddress int64 = 0
 	var previousBlock int
 	//fileInfo, _ := file.Stat()
@@ -26,9 +26,9 @@ func ReadFile(file *os.File) {
 
 	//Get IDBLOCK
 	idBlock := blocks.ID{}
-	idBlock.NewBlock(file, startAddress, blocks.IDBLOCK_SIZE)
+	idBlock.NewBlock(file, startAddress, blocks.IdblockSize)
 
-	previousBlock = blocks.IDBLOCK_SIZE
+	previousBlock = blocks.IdblockSize
 
 	fmt.Printf("%s %s %s %s %d %s \n", idBlock.File,
 		idBlock.Version,
@@ -44,9 +44,9 @@ func ReadFile(file *os.File) {
 	startAddress += int64(previousBlock)
 
 	hdBlock := blocks.HD{}
-	hdBlock.NewBlock(file, startAddress, blocks.HDBLOCK_SIZE)
+	hdBlock.NewBlock(file, startAddress, blocks.HdblockSize)
 
-	fmt.Printf("%s\n", hdBlock.ID)
+	fmt.Printf("%s\n", hdBlock.Header.ID)
 	fmt.Printf("%+v\n\n", hdBlock)
 
 	//From HDBLOCK read File History
@@ -71,12 +71,13 @@ func ReadFile(file *os.File) {
 
 	//Get all DataGroup
 	for NextAddressDG != 0 {
+
 		dgBlock := blocks.DG{}
-		dgBlock.NewBlock(file, NextAddressDG, blocks.DGBLOCK_SIZE)
+		dgBlock.NewBlock(file, NextAddressDG, blocks.DgblockSize)
 
 		mapDG[index] = &dgBlock
 		mf4File.DG = mapDG
-		fmt.Printf("%s\n", dgBlock.ID)
+		fmt.Printf("%s\n", dgBlock.Header.ID)
 		fmt.Printf("%+v\n\n", dgBlock)
 
 		//From DGBLOCK read ChannelGroup
@@ -86,11 +87,11 @@ func ReadFile(file *os.File) {
 
 		for NextAddressCG != 0 {
 			cgBlock := blocks.CG{}
-			cgBlock.NewBlock(file, NextAddressCG, blocks.CGBLOCK_SIZE)
+			cgBlock.NewBlock(file, NextAddressCG, blocks.CgblockSize)
 
 			mapCG[indexCG] = &cgBlock
 			mf4File.CG = mapCG
-			fmt.Printf("%s\n", cgBlock.ID)
+			fmt.Printf("%s\n", cgBlock.Header.ID)
 			fmt.Printf("%+v\n\n", cgBlock)
 
 			//debug(file, cgBlock.TxAcqName, 88)
@@ -104,13 +105,27 @@ func ReadFile(file *os.File) {
 
 				cnBlock.NewBlock(file, nextAddressCN)
 				fmt.Printf("%+v\n\n", cnBlock)
-				
-				txBlock := blocks.TX{}
-				//debug(file,int64(cnBlock.TxName),80)
-				txBlock.NewBlock(file, int64(cnBlock.TxName), 50)
-				//blocks.GetText(file, cnBlock.TxName, 100)
 
-				fmt.Printf("%s\n", cnBlock.ID)
+				txBlock := blocks.TX{}
+				txBlock.NewBlock(file, int64(cnBlock.TxName), 50)
+				channelName := string(txBlock.Link.TxData)
+
+				fmt.Println(channelName)
+
+				if getXML && cnBlock.MdComment != 0 {
+					mdBlock := blocks.MD{}
+					mdBlock.NewBlock(file, int64(cnBlock.MdComment), 50)
+					mdComment := string(mdBlock.MdData.Value)
+					fmt.Print(mdComment)
+				} else {
+
+					mdBlock := (&blocks.MD{}).BlankBlock()
+					mdComment := ""
+					fmt.Print(mdComment, mdBlock)
+				}
+
+				// debug(file, int64(cnBlock.MdComment), 100)
+				fmt.Printf("%s\n", cnBlock.Header.ID)
 				fmt.Printf("%+v\n\n", cnBlock)
 
 				nextAddressCN = cnBlock.CnNext
@@ -135,11 +150,11 @@ func (m *MF4) LoadAttachmemt(file *os.File, startAddressAT int64) {
 
 	for nextAddressAT != 0 {
 		atBlock := blocks.AT{}
-		atBlock.NewBlock(file, nextAddressAT, blocks.ATBLOCK_SIZE)
+		atBlock.NewBlock(file, nextAddressAT, blocks.AtblockSize)
 
 		mapAT[index] = &atBlock
 		m.AT = mapAT
-		fmt.Printf("%s\n", atBlock.ID)
+		fmt.Printf("%s\n", atBlock.Header.ID)
 		fmt.Printf("%+v\n\n", atBlock)
 
 		nextAddressAT = atBlock.ATNext
@@ -155,7 +170,7 @@ func (m *MF4) LoadFileHistory(file *os.File, startAddressFH int64) {
 
 	for nextAddressFH != 0 {
 		fhBlock := blocks.FH{}
-		fhBlock.NewBlock(file, nextAddressFH, blocks.FHBLOCK_SIZE)
+		fhBlock.NewBlock(file, nextAddressFH, blocks.FhblockSize)
 
 		mapFH[index] = &fhBlock
 		m.FH = mapFH

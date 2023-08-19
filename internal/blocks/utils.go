@@ -7,6 +7,13 @@ import (
 	"os"
 )
 
+type Header struct {
+	ID        [4]byte
+	Reserved  [4]byte
+	Length    uint64
+	LinkCount uint64
+}
+
 func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	buf := make([]byte, block_size)
 	_, errs := file.Seek(address, 0)
@@ -31,20 +38,25 @@ func NewBuffer(file *os.File, startAdress int64, BLOCK_SIZE int) *bytes.Buffer {
 	return bytes.NewBuffer(bytesValue)
 }
 
-func GetText(file *os.File, address uint64, size int) {
-
-	_, err := file.Seek(int64(address), io.SeekStart)
-	if err != nil {
-		panic(err)
+func getText(file *os.File, startAdress int64, bufSize []byte, decode bool) []byte {
+	if startAdress == 0 {
+		return []byte{}
 	}
-	buf := make([]byte, size)
-	n, err := file.Read(buf[:cap(buf)])
-	buf = buf[:n]
-	if err != nil {
-		if err != io.EOF {
+
+	if decode {
+		_, err := file.Seek(startAdress+24, io.SeekStart)
+		if err != nil {
 			panic(err)
 		}
-	}
-	fmt.Printf("%s\n", buf)
 
+		n, err := file.Read(bufSize[:cap(bufSize)])
+		bufSize = bufSize[:n]
+		if err != nil {
+			if err != io.EOF {
+				panic(err)
+			}
+		}
+		return bufSize
+	}
+	return []byte{}
 }
