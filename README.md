@@ -18,13 +18,15 @@ Package based on <https://github.com/danielhrisca/asammdf>
 
 Use go get to retrieve the package to add it to your GOPATH workspace, or project's Go module dependencies.
 
-`go get github.com/LincolnG4/GoMDF@main`
+```go
+go get github.com/LincolnG4/GoMDF@main
+```
 
 ## Quick Examples
 
 ⚠️ The package is still under development !!! ⚠️
 
-```
+```go
 package main
 
 import (

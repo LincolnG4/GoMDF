@@ -22,24 +22,6 @@ type CG struct {
 	InvalBytes  uint32
 }
 
-type Group struct {
-	DataGroup               *DG
-	Channels                []uint64
-	ChannelDependencies     []uint64
-	SignalData              []uint64
-	Record                  int
-	Trigger                 int
-	StringDtypes            int
-	DataBlocks              []uint64
-	SingleChannelDtype      int
-	UsesId                  bool
-	ReadSplitCount          int
-	DataBlocksInfoGenerator []uint64
-	ChannelGroup            CG
-	RecordSize              map[uint64]uint32
-	Sorted                  bool
-}
-
 func (b *CG) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
@@ -77,19 +59,3 @@ func (b *CG) BlankBlock() CG {
 		InvalBytes:  0,
 	}
 }
-
-// func (CG *CG) Copy(dgBlock *DGBlock) {
-// 	CG.DataGroup = &dgBlock
-// 	CG.Channels = []uint64{}
-// 	CG.ChannelDependencies = []uint64{}
-// 	CG.SignalData = []uint64{}
-// 	CG.Record = 0
-// 	CG.Trigger = 0
-// 	CG.StringDtypes = 0
-// 	CG.DataBlocks = []uint64{}
-// 	CG.SingleChannelDtype = 0
-// 	CG.UsesId = false
-// 	CG.ReadSplitCount = 0
-// 	CG.DataBlocksInfoGenerator = []uint64{}
-
-// }

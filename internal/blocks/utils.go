@@ -14,6 +14,24 @@ type Header struct {
 	LinkCount uint64
 }
 
+type Group struct {
+	DataGroup    *DG
+	ChannelGroup *CG
+	Channels     *map[string]*CN
+	//ChannelDependencies     []*CG
+	SignalData              []uint64
+	Record                  int
+	Trigger                 int
+	StringDtypes            int
+	DataBlocks              []uint64
+	SingleChannelDtype      int
+	UsesId                  bool
+	ReadSplitCount          int
+	DataBlocksInfoGenerator []uint64
+	RecordSize              map[uint64]uint32
+	Sorted                  bool
+}
+
 func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	buf := make([]byte, block_size)
 	_, errs := file.Seek(address, 0)

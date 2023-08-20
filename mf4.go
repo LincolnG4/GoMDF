@@ -9,13 +9,15 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
+
+
 type MF4 struct {
+	Identification *blocks.ID
 	FH map[int]*blocks.FH
 	AT map[int]*blocks.AT
 	//EV map[int]*blocks.EVblock
 	//CH map[int]*blocks.CHBlock
-	DG map[int]*blocks.DG
-	CG map[int]*blocks.CG
+	Groups map[string]*blocks.Group
 }
 
 func ReadFile(file *os.File, getXML bool) *MF4 {
@@ -24,12 +26,15 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 	//fileInfo, _ := file.Stat()
 	//fileSize := fileInfo.Size()
 
+	mf4File := MF4{}
+
 	//Get IDBLOCK
 	idBlock := blocks.ID{}
 	idBlock.NewBlock(file, startAddress, blocks.IdblockSize)
 
-	previousBlock = blocks.IdblockSize
-
+	mf4File.Identification  = &idBlock
+	
+	
 	fmt.Printf("%s %s %s %s %d %s \n", idBlock.File,
 		idBlock.Version,
 		idBlock.Program,
@@ -38,9 +43,10 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 		idBlock.Reserved2)
 
 	//Create MF4 struct from the file
-	mf4File := MF4{}
+	
 
 	//Get HDBLOCK
+	previousBlock = blocks.IdblockSize
 	startAddress += int64(previousBlock)
 
 	hdBlock := blocks.HD{}
@@ -58,25 +64,32 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 
 	//From HDBLOCK read Attachments
 	fmt.Println("##AT")
-	startAddressAT := hdBlock.ATFirst
 
-	//Get all File History
+	//Get all AT
+	startAddressAT := hdBlock.ATFirst
 	mf4File.LoadAttachmemt(file, startAddressAT)
 	fmt.Printf("%+v\n\n", mf4File.AT)
 
 	//From HDBLOCK read DataGroup
 	NextAddressDG := hdBlock.DGFirst
 	index := 0
-	mapDG := make(map[int]*blocks.DG)
+
+	mf4File.Groups = make(map[string]*blocks.Group)
+	
+	var cnBlock blocks.CN
+	var cgBlock blocks.CG
 
 	//Get all DataGroup
 	for NextAddressDG != 0 {
+		
+		//Store group 
+		grp :=  blocks.Group{}
 
 		dgBlock := blocks.DG{}
+		grp.DataGroup = &dgBlock
+
 		dgBlock.NewBlock(file, NextAddressDG, blocks.DgblockSize)
 
-		mapDG[index] = &dgBlock
-		mf4File.DG = mapDG
 		fmt.Printf("%s\n", dgBlock.Header.ID)
 		fmt.Printf("%+v\n\n", dgBlock)
 
@@ -86,13 +99,16 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 		mapCG := make(map[int]*blocks.CG)
 
 		for NextAddressCG != 0 {
-			cgBlock := blocks.CG{}
+
+			cgBlock = blocks.CG{}
+			grp.ChannelGroup = &cgBlock
+			
 			cgBlock.NewBlock(file, NextAddressCG, blocks.CgblockSize)
 
 			mapCG[indexCG] = &cgBlock
-			mf4File.CG = mapCG
-			fmt.Printf("%s\n", cgBlock.Header.ID)
-			fmt.Printf("%+v\n\n", cgBlock)
+			
+			// fmt.Printf("%s\n", cgBlock.Header.ID)
+			// fmt.Printf("%+v\n\n", cgBlock)
 
 			//debug(file, cgBlock.TxAcqName, 88)
 			//From CGBLOCK read Channel
@@ -101,45 +117,78 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 
 			// mapCN := make(map[int]*blocks.CG)
 			for nextAddressCN != 0 {
-				cnBlock := blocks.CN{}
+				cnBlock = blocks.CN{}
+				grp.ChannelGroup = &cgBlock
 
 				cnBlock.NewBlock(file, nextAddressCN)
-				fmt.Printf("%+v\n\n", cnBlock)
+				// fmt.Printf("%+v\n\n", cnBlock)
 
 				txBlock := blocks.TX{}
+
 				txBlock.NewBlock(file, int64(cnBlock.TxName), 50)
 				channelName := string(txBlock.Link.TxData)
+				channelMap := make(map[string]*blocks.CN)
+				channelMap[channelName] = &cnBlock
+				
+				grp.Channels = &channelMap
+				//fmt.Println(channelName)
 
-				fmt.Println(channelName)
-
+				//Get XML comments
 				if getXML && cnBlock.MdComment != 0 {
 					mdBlock := blocks.MD{}
 					mdBlock.NewBlock(file, int64(cnBlock.MdComment), 50)
-					mdComment := string(mdBlock.MdData.Value)
-					fmt.Print(mdComment)
+					//mdComment := string(mdBlock.MdData.Value)
+					//fmt.Print(mdComment,"\n")
 				} else {
-
 					mdBlock := (&blocks.MD{}).BlankBlock()
 					mdComment := ""
-					fmt.Print(mdComment, mdBlock)
+					fmt.Print(mdComment, mdBlock,"\n")
 				}
+				
+				//debug(file, int64(dgBlock.Data), 1000)
+				fmt.Printf("%+v",cnBlock)
 
-				// debug(file, int64(cnBlock.MdComment), 100)
-				fmt.Printf("%s\n", cnBlock.Header.ID)
-				fmt.Printf("%+v\n\n", cnBlock)
+				// signal data
+				
+				
+				// // signal data
+				// if cnBlock.Data != 0 {
+				// 	cnBlock.GetSignalData(file,dgBlock.Data,dgBlock.RecIDSize, dgBlock.Header.Length)
+				// }else{
+				// 	fmt.Println("")
+				// }
+				
+				// if cnBlock.CnComposition != 0 {
+				// 	cnBlock.GetSignalData(file)
+				// }else{
+				// 	fmt.Println("")
+				// }
+				
 
+				fmt.Println(grp)
+				
 				nextAddressCN = cnBlock.CnNext
 				indexCN++
+				
 			}
-
+			
+			fmt.Println("\n##############################")
+			
 			NextAddressCG = cgBlock.CGNext
 			indexCG++
 		}
+	
+		//Read data
+
+		//dataAddress := dgBlock.Data
+
+
+
 
 		NextAddressDG = dgBlock.DGNext
 		index++
 	}
-	fmt.Printf("%+v\n", mf4File.DG)
+	
 	return &mf4File
 }
 
@@ -180,6 +229,11 @@ func (m *MF4) LoadFileHistory(file *os.File, startAddressFH int64) {
 		index++
 	}
 
+}
+
+
+func (m *MF4) Version() string {
+	return string(m.Identification.Version[:])
 }
 
 func debug(file *os.File, offset int64, size int) {

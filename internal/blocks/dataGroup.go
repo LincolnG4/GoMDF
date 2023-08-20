@@ -10,7 +10,7 @@ type DG struct {
 	Header     Header
 	DGNext     int64
 	CGNext     int64
-	DATA       uint64
+	Data       uint64
 	MDComment  uint16
 	RecIDSize  uint8
 	DGReserved [7]byte
@@ -41,7 +41,7 @@ func (b *DG) BlankBlock() DG {
 		},
 		DGNext:     0,
 		CGNext:     0,
-		DATA:       0,
+		Data:       0,
 		MDComment:  0,
 		RecIDSize:  0,
 		DGReserved: [7]byte{},

@@ -15,7 +15,7 @@ type CN struct {
 	TxName        uint64
 	SiSource      uint64
 	CcConvertion  uint64
-	Data          uint64
+	Data      	  uint64
 	MdUnit        uint64
 	MdComment     uint64
 	Type          uint8
@@ -76,4 +76,8 @@ func seekBinaryByAddressCN(file *os.File, address int64, block_size int64) []byt
 
 	}
 	return buf
+}
+
+func (b *CN) GetSignalData(file *os.File, startAdress uint64, recordsize uint8, size uint64) {
+	
 }

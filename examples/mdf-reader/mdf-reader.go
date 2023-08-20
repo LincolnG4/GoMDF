@@ -22,6 +22,8 @@ func main() {
 	defer file.Close()
 	
 	mf4 := mf4.ReadFile(file,true)
-	fmt.Printf("%+v",mf4)
+	version := mf4.Version()
+	fmt.Print(version)
+
 }
 
