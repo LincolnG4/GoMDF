@@ -7,7 +7,7 @@ import (
 )
 
 type DT struct {
-	Header *Header
+	Header  *Header
 	Samples []byte
 }
 
@@ -25,9 +25,7 @@ func (b *DT) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
 	}
-	fmt.Printf("%+v",b.Header)
-	
-	
+	fmt.Printf("%+v", b.Header)
 
 }
 
