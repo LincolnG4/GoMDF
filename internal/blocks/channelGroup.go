@@ -8,12 +8,12 @@ import (
 
 type CG struct {
 	Header      Header
-	CGNext      int64
-	CNNext      int64
-	TxAcqName   int64
-	SiAcqSource uint64
-	SrFirst     uint64
-	MDComment   uint64
+	Next        Link
+	CNNext      Link
+	TxAcqName   Link
+	SiAcqSource Link
+	SrFirst     Link
+	MDComment   Link
 	RecordId    uint64
 	CycleCount  uint64
 	Flags       uint16
@@ -22,7 +22,7 @@ type CG struct {
 	InvalBytes  uint32
 }
 
-func (b *CG) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
+func (b *CG) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 
@@ -45,7 +45,7 @@ func (b *CG) BlankBlock() CG {
 			Length:    0,
 			LinkCount: 0,
 		},
-		CGNext:      0,
+		Next:        0,
 		CNNext:      0,
 		TxAcqName:   0,
 		SiAcqSource: 0,

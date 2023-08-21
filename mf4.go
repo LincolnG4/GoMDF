@@ -11,16 +11,21 @@ import (
 
 type MF4 struct {
 	Identification *blocks.ID
+	Header         *blocks.HD
 	FileHistory    []*blocks.FH
-	AT             map[int]*blocks.AT
-	//EV map[int]*blocks.EVblock
-	//CH map[int]*blocks.CHBlock
-	Groups map[string]*blocks.Group
+	Attachments    []*blocks.AT
+	Events         []*blocks.EV
+	Groups         map[string]*blocks.Group
 }
 
+// Read the MF4 file and return the MF4 object with all informations
 func ReadFile(file *os.File, getXML bool) *MF4 {
-	var startAddress int64 = 0
-	var previousBlock int
+
+	var cnBlock blocks.CN
+	var cgBlock blocks.CG
+
+	var startAddress blocks.Link = 0
+
 	//fileInfo, _ := file.Stat()
 	//fileSize := fileInfo.Size()
 
@@ -28,7 +33,7 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 
 	//Get IDBLOCK
 	idBlock := blocks.ID{}
-	idBlock.NewBlock(file, startAddress, blocks.IdblockSize)
+	idBlock.New(file, startAddress, blocks.IdblockSize)
 
 	mf4File.Identification = &idBlock
 
@@ -42,11 +47,12 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 	//Create MF4 struct from the file
 
 	//Get HDBLOCK
-	previousBlock = blocks.IdblockSize
-	startAddress += int64(previousBlock)
+	startAddress = blocks.IdblockSize
 
 	hdBlock := blocks.HD{}
-	hdBlock.NewBlock(file, startAddress, blocks.HdblockSize)
+	hdBlock.New(file, startAddress, blocks.HdblockSize)
+
+	mf4File.Header = &hdBlock
 
 	fmt.Printf("%s\n", hdBlock.Header.ID)
 	fmt.Printf("%+v\n\n", hdBlock)
@@ -64,7 +70,7 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 	//Get all AT
 	startAddressAT := hdBlock.ATFirst
 	mf4File.LoadAttachmemt(file, startAddressAT)
-	fmt.Printf("%+v\n\n", mf4File.AT)
+	fmt.Printf("%+v\n\n", mf4File.Attachments)
 
 	//From HDBLOCK read DataGroup
 	NextAddressDG := hdBlock.DGFirst
@@ -72,67 +78,62 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 
 	mf4File.Groups = make(map[string]*blocks.Group)
 
-	var cnBlock blocks.CN
-	var cgBlock blocks.CG
-
 	//Get all DataGroup
 	for NextAddressDG != 0 {
-
 		//Store group
 		grp := blocks.Group{}
 
 		dgBlock := blocks.DG{}
 		grp.DataGroup = &dgBlock
 
-		dgBlock.NewBlock(file, NextAddressDG, blocks.DgblockSize)
+		dgBlock.New(file, NextAddressDG, blocks.DgblockSize)
 
 		fmt.Printf("%s\n", dgBlock.Header.ID)
 		fmt.Printf("%+v\n\n", dgBlock)
 
 		//From DGBLOCK read ChannelGroup
-		NextAddressCG := dgBlock.CGNext
+		NextAddressCG := dgBlock.CGFirst
 		indexCG := 0
-		mapCG := make(map[int]*blocks.CG)
+		arrayCG := make([]*blocks.CG, 0)
 
 		for NextAddressCG != 0 {
-
 			cgBlock = blocks.CG{}
-			grp.ChannelGroup = &cgBlock
+			arrayCG = append(arrayCG, &cgBlock)
+			grp.ChannelGroup = arrayCG
+			
 
-			cgBlock.NewBlock(file, NextAddressCG, blocks.CgblockSize)
+			cgBlock.New(file, NextAddressCG, blocks.CgblockSize)
 
-			mapCG[indexCG] = &cgBlock
-
-			// fmt.Printf("%s\n", cgBlock.Header.ID)
-			// fmt.Printf("%+v\n\n", cgBlock)
+			fmt.Printf("%s\n", cgBlock.Header.ID)
+			fmt.Printf("%+v\n\n", cgBlock)
 
 			//debug(file, cgBlock.TxAcqName, 88)
 			//From CGBLOCK read Channel
+
 			nextAddressCN := cgBlock.CNNext
 			indexCN := 0
 
 			// mapCN := make(map[int]*blocks.CG)
 			for nextAddressCN != 0 {
 				cnBlock = blocks.CN{}
-				grp.ChannelGroup = &cgBlock
 
-				cnBlock.NewBlock(file, nextAddressCN)
+				cnBlock.New(file, nextAddressCN)
 				// fmt.Printf("%+v\n\n", cnBlock)
 
 				txBlock := blocks.TX{}
 
-				txBlock.NewBlock(file, int64(cnBlock.TxName), 50)
-				channelName := string(txBlock.Link.TxData)
+				txBlock.New(file, cnBlock.TxName, 50)
+				channelName := string(txBlock.TxData)
 				channelMap := make(map[string]*blocks.CN)
 				channelMap[channelName] = &cnBlock
 
 				grp.Channels = &channelMap
-				//fmt.Println(channelName)
+				fmt.Println(channelName)
 
 				//Get XML comments
 				if getXML && cnBlock.MdComment != 0 {
 					mdBlock := blocks.MD{}
-					mdBlock.NewBlock(file, int64(cnBlock.MdComment), 50)
+					mdBlock.New(file, cnBlock.MdComment, 50)
 					//mdComment := string(mdBlock.MdData.Value)
 					//fmt.Print(mdComment,"\n")
 				} else {
@@ -158,59 +159,67 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 				// }else{
 				// 	fmt.Println("")
 				// }
+		
+				//Read data
 
-				fmt.Println(grp)
 
-				nextAddressCN = cnBlock.CnNext
+		
+				
+
+			
+
+				nextAddressCN = cnBlock.Next
 				indexCN++
 
 			}
 
-			fmt.Println("\n##############################")
+			
 
-			NextAddressCG = cgBlock.CGNext
+			NextAddressCG = cgBlock.Next
 			indexCG++
 		}
+		
+		fmt.Println("\n##############################")
+		dtBlock := blocks.DT{}
+		dtBlock.New(file,dgBlock.Data,100)
 
-		//Read data
+		fmt.Printf("%+v \n",dtBlock.Header)
 
-		//dataAddress := dgBlock.Data
-
-		NextAddressDG = dgBlock.DGNext
+		NextAddressDG = dgBlock.Next
 		index++
 	}
 
 	return &mf4File
 }
 
-func (m *MF4) LoadAttachmemt(file *os.File, startAddressAT int64) {
+func (m *MF4) LoadAttachmemt(file *os.File, startAddressAT blocks.Link) {
 	var index int = 0
-	mapAT := make(map[int]*blocks.AT)
+	arrayAT := make([]*blocks.AT, 0)
 	nextAddressAT := startAddressAT
 
 	for nextAddressAT != 0 {
 		atBlock := blocks.AT{}
-		atBlock.NewBlock(file, nextAddressAT, blocks.AtblockSize)
+		atBlock.New(file, nextAddressAT, blocks.AtblockSize)
 
-		mapAT[index] = &atBlock
-		m.AT = mapAT
+		arrayAT = append(arrayAT, &atBlock)
+
 		fmt.Printf("%s\n", atBlock.Header.ID)
 		fmt.Printf("%+v\n\n", atBlock)
 
 		nextAddressAT = atBlock.ATNext
 		index++
 	}
-
+	m.Attachments = arrayAT
 }
 
-func (m *MF4) LoadFileHistory(file *os.File, startAddressFH int64) {
+func (m *MF4) LoadFileHistory(file *os.File, startAddressFH blocks.Link) {
 	var index int = 0
 	FHarray := make([]*blocks.FH, 0)
 	nextAddressFH := startAddressFH
 
 	for nextAddressFH != 0 {
 		fhBlock := blocks.FH{}
-		fhBlock.NewBlock(file, nextAddressFH, blocks.FhblockSize)
+		fhBlock.New(file, nextAddressFH, blocks.FhblockSize)
 
 		FHarray = append(FHarray, &fhBlock)
 
@@ -222,6 +231,7 @@ func (m *MF4) LoadFileHistory(file *os.File, startAddressFH int64) {
 	m.FileHistory = FHarray
 }
 
+// Version method returns the MDF file version
 func (m *MF4) Version() string {
 	return string(m.Identification.Version[:])
 }

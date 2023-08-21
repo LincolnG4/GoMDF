@@ -18,14 +18,11 @@ func main() {
 		}
 
 	}
-
 	defer file.Close()
 	
 	mf4 := mf4.ReadFile(file,true)
 	version := mf4.Version()
 	fmt.Print(version)
-
-
 
 }
 

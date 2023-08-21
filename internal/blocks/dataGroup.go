@@ -8,15 +8,15 @@ import (
 
 type DG struct {
 	Header     Header
-	DGNext     int64
-	CGNext     int64
-	Data       uint64
-	MDComment  uint16
+	Next       Link
+	CGFirst    Link
+	Data       Link
+	MDComment  Link
 	RecIDSize  uint8
 	DGReserved [7]byte
 }
 
-func (b *DG) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
+func (b *DG) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 
@@ -39,8 +39,8 @@ func (b *DG) BlankBlock() DG {
 			Length:    64,
 			LinkCount: 4,
 		},
-		DGNext:     0,
-		CGNext:     0,
+		Next:       0,
+		CGFirst:    0,
 		Data:       0,
 		MDComment:  0,
 		RecIDSize:  0,

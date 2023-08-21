@@ -6,16 +6,12 @@ import (
 	"os"
 )
 
-type Link struct {
+type TX struct {
+	Header *Header
 	TxData []byte
 }
 
-type TX struct {
-	Header *Header
-	Link   *Link
-}
-
-func (b *TX) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
+func (b *TX) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
 	b.Header = &Header{}
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)
@@ -29,23 +25,21 @@ func (b *TX) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
 	}
-	b.Link = &Link{}
+	b.TxData = []byte{}
 	buf := make([]byte, int64(b.Header.Length-24))
 
-	b.Link.TxData = getText(file, startAdress, buf, true)
+	b.TxData = getText(file, startAdress, buf, true)
 
 }
 
 func (b *TX) BlankBlock() TX {
 	return TX{
-		&Header{
+		Header: &Header{
 			ID:        [4]byte{'#', '#', 'T', 'X'},
 			Reserved:  [4]byte{},
 			Length:    64,
 			LinkCount: 4,
 		},
-		&Link{
-			TxData: []byte{},
-		},
+		TxData: []byte{},
 	}
 }

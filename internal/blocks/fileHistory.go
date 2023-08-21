@@ -7,17 +7,17 @@ import (
 )
 
 type FH struct {
-	Header         Header
-	FHNext         int64
-	MDComment      uint64
-	FHTimeNS       uint64
-	FHTZOffsetMin  int16
-	FHDSTOffsetMin int16
-	FHTimeFlags    uint8
-	FHReserved     [3]byte
+	Header       Header
+	FHNext       Link
+	MDComment    Link
+	TimeNS       uint64
+	TZOffsetMin  int16
+	DSTOffsetMin int16
+	TimeFlags    uint8
+	Reserved     [3]byte
 }
 
-func (b *FH) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
+func (b *FH) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
 
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
@@ -42,12 +42,12 @@ func (b *FH) BlankBlock() FH {
 			Length:    56,
 			LinkCount: 2,
 		},
-		FHNext:         0,
-		MDComment:      0,
-		FHTimeNS:       0,
-		FHTZOffsetMin:  0,
-		FHDSTOffsetMin: 0,
-		FHTimeFlags:    0,
-		FHReserved:     [3]byte{},
+		FHNext:       0,
+		MDComment:    0,
+		TimeNS:       0,
+		TZOffsetMin:  0,
+		DSTOffsetMin: 0,
+		TimeFlags:    0,
+		Reserved:     [3]byte{},
 	}
 }

@@ -15,7 +15,7 @@ type ID struct {
 	Reserved2     [34]byte
 }
 
-func (b *ID) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
+func (b *ID) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 

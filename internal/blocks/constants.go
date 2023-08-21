@@ -10,6 +10,7 @@ const (
 	MdID = "##MD"
 	FgID = "##FH"
 	DtID = "##DT"
+	CaID = "##CA"
 )
 
 const (

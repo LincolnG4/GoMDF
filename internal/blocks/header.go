@@ -8,12 +8,12 @@ import (
 
 type HD struct {
 	Header     Header
-	DGFirst    int64
-	FHFirst    int64
-	CHFirst    int64
-	ATFirst    int64
-	EVFirst    int64
-	MDComment  int64
+	DGFirst    Link
+	FHFirst    Link
+	CHFirst    Link
+	ATFirst    Link
+	EVFirst    Link
+	MDComment  Link
 	StartTime  uint64
 	TZOffset   int16
 	DSTOffset  int16
@@ -25,15 +25,21 @@ type HD struct {
 	StartDist  float32
 }
 
-func (b *HD) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
+func (b *HD) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
+	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)
 
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
 	}
 
+	buffer = NewBuffer(file, startAdress+24, int(b.Header.Length))
+	BinaryError = binary.Read(buffer, binary.LittleEndian, b)
+	if BinaryError != nil {
+		fmt.Println("ERROR", BinaryError)
+	}
+	fmt.Println(b)
 }
 
 func (b *HD) BlankBlock() HD {

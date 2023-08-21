@@ -8,10 +8,10 @@ import (
 
 type AT struct {
 	Header       Header
-	ATNext       int64
-	TXFilename   uint64
-	TXMimetype   uint64
-	MDComment    uint16
+	ATNext       Link
+	TXFilename   Link
+	TXMimetype   Link
+	MDComment    Link
 	Flags        uint16
 	CreatorIndex uint16
 	ATReserved   [4]byte
@@ -21,7 +21,7 @@ type AT struct {
 	EmbeddedData []byte
 }
 
-func (b *AT) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
+func (b *AT) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
 
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)

@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+type Link int64
+
 type Header struct {
 	ID        [4]byte
 	Reserved  [4]byte
@@ -16,25 +18,18 @@ type Header struct {
 
 type Group struct {
 	DataGroup    *DG
-	ChannelGroup *CG
+	ChannelGroup []*CG
 	Channels     *map[string]*CN
-	//ChannelDependencies     []*CG
-	SignalData              []uint64
-	Record                  int
-	Trigger                 int
-	StringDtypes            int
-	DataBlocks              []uint64
-	SingleChannelDtype      int
-	UsesId                  bool
-	ReadSplitCount          int
-	DataBlocksInfoGenerator []uint64
-	RecordSize              map[uint64]uint32
-	Sorted                  bool
 }
 
-func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
+func NewBuffer(file *os.File, startAdress Link, BLOCK_SIZE int) *bytes.Buffer {
+	bytesValue := seekBinaryByAddress(file, startAdress, BLOCK_SIZE)
+	return bytes.NewBuffer(bytesValue)
+}
+
+func seekBinaryByAddress(file *os.File, address Link, block_size int) []byte {
 	buf := make([]byte, block_size)
-	_, errs := file.Seek(address, 0)
+	_, errs := file.Seek(int64(address), 0)
 	if errs != nil {
 		if errs != io.EOF {
 			fmt.Println(errs)
@@ -51,18 +46,13 @@ func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	return buf
 }
 
-func NewBuffer(file *os.File, startAdress int64, BLOCK_SIZE int) *bytes.Buffer {
-	bytesValue := seekBinaryByAddress(file, startAdress, BLOCK_SIZE)
-	return bytes.NewBuffer(bytesValue)
-}
-
-func getText(file *os.File, startAdress int64, bufSize []byte, decode bool) []byte {
+func getText(file *os.File, startAdress Link, bufSize []byte, decode bool) []byte {
 	if startAdress == 0 {
 		return []byte{}
 	}
 
 	if decode {
-		_, err := file.Seek(startAdress+24, io.SeekStart)
+		_, err := file.Seek(int64(startAdress)+24, io.SeekStart)
 		if err != nil {
 			panic(err)
 		}
