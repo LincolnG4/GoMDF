@@ -11,7 +11,7 @@ type DT struct {
 	Samples []byte
 }
 
-func (b *DT) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
+func (b *DT) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	b.Header = &Header{}
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)

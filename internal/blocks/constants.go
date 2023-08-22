@@ -8,11 +8,14 @@ const (
 	CnID = "##CN"
 	TxID = "##TX"
 	MdID = "##MD"
-	FgID = "##FH"
+	FhID = "##FH"
 	DtID = "##DT"
+	HdID = "##HD"
 )
 
 const (
+	LinkSize    = 8
+	HeaderSize  = 24
 	IdblockSize = 64
 	HdblockSize = 104
 	FhblockSize = 56

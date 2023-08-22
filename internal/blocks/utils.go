@@ -14,24 +14,6 @@ type Header struct {
 	LinkCount uint64
 }
 
-type Group struct {
-	DataGroup    *DG
-	ChannelGroup *CG
-	Channels     *map[string]*CN
-	//ChannelDependencies     []*CG
-	SignalData              []uint64
-	Record                  int
-	Trigger                 int
-	StringDtypes            int
-	DataBlocks              []uint64
-	SingleChannelDtype      int
-	UsesId                  bool
-	ReadSplitCount          int
-	DataBlocksInfoGenerator []uint64
-	RecordSize              map[uint64]uint32
-	Sorted                  bool
-}
-
 func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	buf := make([]byte, block_size)
 	_, errs := file.Seek(address, 0)
@@ -77,4 +59,12 @@ func getText(file *os.File, startAdress int64, bufSize []byte, decode bool) []by
 		return bufSize
 	}
 	return []byte{}
+}
+
+func CalculateLinkSize(linkCount uint64) int {
+	return int(linkCount * LinkSize)
+}
+
+func CalculateDataSize(length uint64, linkCount uint64) int {
+	return (int(length) - 24 - int(linkCount)*LinkSize)
 }

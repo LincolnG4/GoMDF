@@ -15,7 +15,7 @@ type MD struct {
 	MdData *XML
 }
 
-func (b *MD) NewBlock(file *os.File, startAdress int64, BLOCK_SIZE int) {
+func (b *MD) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
 	b.Header = &Header{}
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
