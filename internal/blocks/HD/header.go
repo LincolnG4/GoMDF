@@ -3,104 +3,110 @@ package HD
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 )
 
 type Block struct {
-	Header *blocks.Header
-	Link   *Link
-	Data   *Data
+	Header blocks.Header
+	Link   Link
+	Data   Data
 }
 
 type Link struct {
-	DGFirst   int64
-	FHFirst   int64
-	CHFirst   int64
-	ATFirst   int64
-	EVFirst   int64
-	MDComment int64
+	DgFirst   int64
+	FhFirst   int64
+	ChFirst   int64
+	AtFirst   int64
+	EvFirst   int64
+	MdComment int64
 }
 
 type Data struct {
-	StartTime  uint64
-	TZOffset   int16
-	DSTOffset  int16
-	TimeFlags  uint8
-	TimeClass  uint8
-	Flags      uint8
-	Reserved2  uint8
-	StartAngle float32
-	StartDist  float32
+	StartTimeNs   uint64
+	TZOffsetMin   int16
+	DSTOffsetMin  int16
+	TimeFlags     uint8
+	TimeClass     uint8
+	Flags         uint8
+	Reserved      uint8
+	StartAngleRad float64
+	StartDistM    float64
 }
 
-func (b *Block) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
-	//Read Header Section
-	b.Header = &blocks.Header{}
-	buffer := blocks.NewBuffer(file, startAdress, blocks.HeaderSize)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)
+var blockID string = blocks.HdID
 
-	if string(b.Header.ID[:]) != blocks.HdID {
-		fmt.Printf("ERROR NOT %s", blocks.HdID)
+// New() seek and read to Block struct based on startAddress and blockSize
+func New(file *os.File, startAdress int64) *Block {
+	var blockSize uint64 = blocks.HeaderSize
+	var b Block
+
+	_, errs := file.Seek(startAdress, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "Memory Addr out of size")
+		}
 	}
 
+	b.Header = blocks.Header{}
+
+	//Create a buffer based on blocksize
+	buf := blocks.LoadBuffer(file, blockSize)
+
+	//Read header
+	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
 	}
 
-	//Read Link Section
-	linkAddress := startAdress + blocks.HeaderSize
-	linkSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	b.Link = &Link{}
-	buffer = blocks.NewBuffer(file, linkAddress, linkSize)
-	BinaryError = binary.Read(buffer, binary.LittleEndian, b.Link)
+	if string(b.Header.ID[:]) != blockID {
+		fmt.Printf("ERROR NOT %s", blockID)
+	}
 
+	fmt.Printf("\n%s\n", b.Header.ID)
+	fmt.Printf("%+v\n", b.Header)
+
+	//Calculates size of Link Block
+	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
+	b.Link = Link{}
+	buf = blocks.LoadBuffer(file, blockSize)
+
+	//Create a buffer based on blocksize
+	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 	}
 
-	//Read Data Section
-	dataAddress := linkAddress + int64(linkSize)
-	dataSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	fmt.Printf("%+v\n", b.Link)
 
-	b.Data = &Data{}
-	buffer = blocks.NewBuffer(file, dataAddress, dataSize)
-	BinaryError = binary.Read(buffer, binary.LittleEndian, b.Data)
+	//Calculates size of Data Block
+	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	b.Data = Data{}
+	buf = blocks.LoadBuffer(file, blockSize)
 
+	//Create a buffer based on blocksize
+	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 	}
 
+	fmt.Printf("%+v\n", b.Data)
+
+	return &b
 }
 
-func (b *Block) BlankBlock() Block {
-	return Block{
-		Header: &blocks.Header{
+func (b *Block) BlankBlock() *Block {
+	return &Block{
+		Header: blocks.Header{
 			ID:        [4]byte{'#', '#', 'H', 'D'},
-			Length:    104,
+			Length:    blocks.HdblockSize,
 			LinkCount: 6,
 		},
-		Link: &Link{
-			DGFirst:   0,
-			FHFirst:   0,
-			CHFirst:   0,
-			ATFirst:   0,
-			EVFirst:   0,
-			MDComment: 0,
-		},
-		Data: &Data{
-			StartTime:  0,
-			TZOffset:   0,
-			DSTOffset:  0,
-			TimeFlags:  0,
-			TimeClass:  0,
-			Flags:      0,
-			Reserved2:  0,
-			StartAngle: 0,
-			StartDist:  0,
-		},
+		Link: Link{},
+		Data: Data{},
 	}
 
 }

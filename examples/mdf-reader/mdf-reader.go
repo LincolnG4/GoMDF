@@ -25,7 +25,5 @@ func main() {
 	version := mf4.Version()
 	fmt.Print(version)
 
-
-
 }
 

@@ -3,82 +3,143 @@ package AT
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
+	"github.com/LincolnG4/GoMDF/internal/blocks/MD"
 )
 
 type Block struct {
-	Header *blocks.Header
-	Link   *Link
-	Data   *Data
+	Header       blocks.Header
+	Link         Link
+	Data         Data
+	EmbeddedData DynamicData
 }
 
 type Link struct {
 	Next       int64
-	TXFilename uint64
-	TXMimetype uint64
-	MDComment  uint16
+	TXFilename int64
+	TXMimetype int64
+	MDComment  int64
 }
 
 type Data struct {
 	Flags        uint16
 	CreatorIndex uint16
-	ATReserved   [4]byte
+	Reserved   	 [4]byte
 	MD5Checksum  [16]byte
 	OriginalSize uint64
 	EmbeddedSize uint64
+}
+
+type DynamicData struct {
 	EmbeddedData []byte
 }
 
-func (b *Block) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
-	//Read Header Section
-	b.Header = &blocks.Header{}
-	buffer := blocks.NewBuffer(file, startAdress, blocks.HeaderSize)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)
+var blockID string = blocks.AtID
 
-	if string(b.Header.ID[:]) != blocks.AtID {
-		fmt.Printf("ERROR NOT %s", blocks.AtID)
+
+func New(file *os.File, startAdress int64) *Block{
+	var b Block
+	var blockSize uint64 = blocks.HeaderSize
+
+	_, errs := file.Seek(startAdress, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "Memory Addr out of size")
+		}
 	}
-
+	
+	b.Header = blocks.Header{}
+	
+	//Create a buffer based on blocksize
+	buf := blocks.LoadBuffer(file, blockSize)
+	
+	//Read header
+	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
 	}
 
-	//Read Link Section
-	linkAddress := startAdress + blocks.HeaderSize
-	linkSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	b.Link = &Link{}
-	buffer = blocks.NewBuffer(file, linkAddress, linkSize)
-	BinaryError = binary.Read(buffer, binary.LittleEndian, b.Link)
+	if string(b.Header.ID[:]) != blockID {
+		fmt.Printf("ERROR NOT %s", blockID)
+	}
+	
+	fmt.Printf("\n%s\n", b.Header.ID)
+	fmt.Printf("%+v\n", b.Header)
 
+	//Calculates size of Link Block
+	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)	
+	b.Link = Link{}
+	buf = blocks.LoadBuffer(file, blockSize)
+	
+	//Create a buffer based on blocksize
+	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 	}
 
-	//Read Data Section
-	dataAddress := linkAddress + int64(linkSize)
-	dataSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	fmt.Printf("%+v\n", b.Link)
 
-	b.Data = &Data{}
-	buffer = blocks.NewBuffer(file, dataAddress, dataSize)
-	BinaryError = binary.Read(buffer, binary.LittleEndian, b.Data)
 
+	//Calculates size of Data Block
+	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	b.Data = Data{}
+	//Create a buffer based on blocksize
+	buf = blocks.LoadBuffer(file, blockSize)
+	
+	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
+	}
+	fmt.Printf("%+v\n\n", b.Data)
+
+	//Calculates size of DynamicData Block
+	blockSize = b.Data.EmbeddedSize
+	
+	b.EmbeddedData = DynamicData{EmbeddedData: make([]byte, b.Data.EmbeddedSize)}
+	buff := make([]byte, blockSize)
+
+	_, err := file.Read(buff)
+	if err != nil {
+		if err != io.EOF {
+			fmt.Println("LoadBuffer error: ", err)
+		}
+	}
+
+	BinaryError = binary.Read(buf, binary.LittleEndian, &b.EmbeddedData.EmbeddedData)
+	if BinaryError != nil {
+		fmt.Println("ERROR", BinaryError)
+	}
+
+	fmt.Printf("%s\n\n", string(b.EmbeddedData.EmbeddedData))
+
+	return &b
+}
+
+func (b *Block) BlankBlock() *Block {
+	return &Block{
+		Header: blocks.Header{
+			ID:        [4]byte{'#', '#', 'A', 'T'},
+			Reserved:  [4]byte{},
+			Length:    blocks.AtblockSize,
+			LinkCount: 2,
+		},
+		Link: Link{},
+		Data: Data{},
+		EmbeddedData: DynamicData{},
 	}
 }
 
-func (b *Block) BlankBlock() Block {
-	return Block{
-		Header: &blocks.Header{
-			ID:        [4]byte{'#', '#', 'A', 'T'},
-			Reserved:  [4]byte{},
-			Length:    96,
-			LinkCount: 2,
-		},
-		Link: &Link{},
-		Data: &Data{},
-	}
+func (b *Block) ReadMdComment(file *os.File, startAdress int64) *MD.Block {
+	mdBlock := MD.Block{}
+	mdBlock.New(file, startAdress)
+
+	fmt.Printf("\n%+s\n", mdBlock.Header.ID)
+	fmt.Printf("%+v\n", mdBlock.Header)
+	
+
+	return &mdBlock
 }

@@ -17,8 +17,8 @@ type Block struct {
 type Link struct {
 	Next      int64
 	CGNext    int64
-	Data      uint64
-	MDComment uint16
+	Data      int64
+	MDComment int64
 }
 
 type Data struct {
@@ -45,7 +45,7 @@ func (b *Block) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	linkAddress := startAdress + blocks.HeaderSize
 	linkSize := blocks.CalculateLinkSize(b.Header.LinkCount)
 	b.Link = &Link{}
-	buffer = blocks.NewBuffer(file, linkAddress, linkSize)
+	buffer = blocks.NewBuffer(file, linkAddress, int(linkSize))
 	BinaryError = binary.Read(buffer, binary.LittleEndian, b.Link)
 
 	if BinaryError != nil {
@@ -57,11 +57,11 @@ func (b *Block) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	dataSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
 
 	b.Data = &Data{}
-	buffer = blocks.NewBuffer(file, dataAddress, dataSize)
+	buffer = blocks.NewBuffer(file, dataAddress, int(dataSize))
 	BinaryError = binary.Read(buffer, binary.LittleEndian, b.Data)
 
 	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+		fmt.Println("ERROR ", BinaryError)
 	}
 
 }

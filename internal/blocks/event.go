@@ -9,11 +9,11 @@ import (
 type EV struct {
 	Header          Header
 	EVNext          int64
-	EVParent        uint64
-	EVRange         uint64
-	TXName          uint16
-	MDComment       uint16
-	Scope           uint16
+	EVParent        int64
+	EVRange         int64
+	TXName          int64
+	MDComment       int64
+	Scope           int64
 	ATReference     [4]byte
 	Type            uint8
 	SyncType        uint8
