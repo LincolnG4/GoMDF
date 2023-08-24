@@ -26,7 +26,7 @@ type Link struct {
 type Data struct {
 	Flags        uint16
 	CreatorIndex uint16
-	Reserved   	 [4]byte
+	Reserved     [4]byte
 	MD5Checksum  [16]byte
 	OriginalSize uint64
 	EmbeddedSize uint64
@@ -38,7 +38,7 @@ type DynamicData struct {
 
 const blockID string = blocks.AtID
 
-func New(file *os.File, startAdress int64) *Block{
+func New(file *os.File, startAdress int64) *Block {
 	var b Block
 	var blockSize uint64 = blocks.HeaderSize
 
@@ -48,12 +48,12 @@ func New(file *os.File, startAdress int64) *Block{
 			fmt.Println(errs, "Memory Addr out of size")
 		}
 	}
-	
+
 	b.Header = blocks.Header{}
-	
+
 	//Create a buffer based on blocksize
 	buf := blocks.LoadBuffer(file, blockSize)
-	
+
 	//Read header
 	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
@@ -64,15 +64,15 @@ func New(file *os.File, startAdress int64) *Block{
 	if string(b.Header.ID[:]) != blockID {
 		fmt.Printf("ERROR NOT %s", blockID)
 	}
-	
+
 	fmt.Printf("\n%s\n", b.Header.ID)
 	fmt.Printf("%+v\n", b.Header)
 
 	//Calculates size of Link Block
-	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)	
+	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
 	b.Link = Link{}
 	buf = blocks.LoadBuffer(file, blockSize)
-	
+
 	//Create a buffer based on blocksize
 	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
@@ -81,13 +81,12 @@ func New(file *os.File, startAdress int64) *Block{
 
 	fmt.Printf("%+v\n", b.Link)
 
-
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
 	b.Data = Data{}
 	//Create a buffer based on blocksize
 	buf = blocks.LoadBuffer(file, blockSize)
-	
+
 	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
@@ -96,7 +95,7 @@ func New(file *os.File, startAdress int64) *Block{
 
 	//Calculates size of DynamicData Block
 	blockSize = b.Data.EmbeddedSize
-	
+
 	b.EmbeddedData = DynamicData{EmbeddedData: make([]byte, b.Data.EmbeddedSize)}
 	buff := make([]byte, blockSize)
 
@@ -125,9 +124,8 @@ func (b *Block) BlankBlock() *Block {
 			Length:    blocks.AtblockSize,
 			LinkCount: 2,
 		},
-		Link: Link{},
-		Data: Data{},
+		Link:         Link{},
+		Data:         Data{},
 		EmbeddedData: DynamicData{},
 	}
 }
-

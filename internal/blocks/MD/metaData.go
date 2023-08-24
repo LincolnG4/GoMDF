@@ -69,7 +69,6 @@ func ReadMdComment(file *os.File, startAdress int64) *Block {
 
 	fmt.Printf("\n%+s\n", mdBlock.Header.ID)
 	fmt.Printf("%+v\n", mdBlock.Header)
-	
 
 	return &mdBlock
 }

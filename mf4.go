@@ -122,7 +122,6 @@ func (m *MF4) read(getXML bool) {
 	m.Groups = make(map[string]*Group)
 
 	var cnBlock CN.Block
-	
 
 	//Get all DataGroup
 	for NextAddressDG != 0 {
@@ -146,7 +145,7 @@ func (m *MF4) read(getXML bool) {
 		indexCG := 0
 
 		for NextAddressCG != 0 {
-			cgBlock := CG.New(file,m.Identification.VersionNumber,NextAddressCG)
+			cgBlock := CG.New(file, m.Identification.VersionNumber, NextAddressCG)
 
 			//From CGBLOCK read Channel
 			nextAddressCN := cgBlock.Link.CnFirst
@@ -155,7 +154,6 @@ func (m *MF4) read(getXML bool) {
 			// mapCN := make(map[int]*blocks.CG)
 			for nextAddressCN != 0 {
 				cnBlock = CN.Block{}
-				
 
 				cnBlock.New(file, nextAddressCN)
 				fmt.Printf("%s\n", cnBlock.Header.ID)
@@ -273,15 +271,14 @@ func (m *MF4) LoadAttachmemt(file *os.File, startAddressAT int64) {
 
 	for nextAddressAT != 0 {
 		atBlock := AT.New(file, nextAddressAT)
-		
-		txBlock := TX.New(file,atBlock.Link.TXFilename) 
-		filename := txBlock.Data.TxData
-		fmt.Printf("Filename attached: %s\n",filename)
 
-		txBlock = TX.New(file,atBlock.Link.TXMimetype) 
+		txBlock := TX.New(file, atBlock.Link.TXFilename)
+		filename := txBlock.Data.TxData
+		fmt.Printf("Filename attached: %s\n", filename)
+
+		txBlock = TX.New(file, atBlock.Link.TXMimetype)
 		mime := txBlock.Data.TxData
-		fmt.Printf("Mime attached: %s\n",mime)
-		
+		fmt.Printf("Mime attached: %s\n", mime)
 
 		//Read MDComment
 		MdCommentAdress := atBlock.Link.MDComment
@@ -310,7 +307,6 @@ func (m *MF4) LoadFileHistory(file *os.File, startAddressFH int64, getXML bool) 
 		fhBlock := FH.New(file, nextAddressFH)
 		MdCommentAdress := fhBlock.Link.MDComment
 
-		
 		//Read MDComment
 		if MdCommentAdress != 0 {
 			comment := MD.ReadMdComment(file, MdCommentAdress)

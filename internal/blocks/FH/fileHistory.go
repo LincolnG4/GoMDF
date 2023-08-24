@@ -102,4 +102,3 @@ func (b *Block) BlankBlock() *Block {
 		Data: Data{},
 	}
 }
-

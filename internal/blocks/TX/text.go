@@ -23,7 +23,7 @@ const blockID string = blocks.TxID
 func New(file *os.File, startAdress int64) *Block {
 	var blockSize uint64 = blocks.HeaderSize
 	var b Block
-	
+
 	_, errs := file.Seek(startAdress, 0)
 	if errs != nil {
 		if errs != io.EOF {
@@ -47,8 +47,7 @@ func New(file *os.File, startAdress int64) *Block {
 		fmt.Printf("ERROR NOT %s", blockID)
 	}
 
-
-	blockSize = b.Header.Length-uint64(blocks.HeaderSize)
+	blockSize = b.Header.Length - uint64(blocks.HeaderSize)
 
 	b.Data = Data{}
 	buff := make([]byte, blockSize)

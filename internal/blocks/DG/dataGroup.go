@@ -17,7 +17,7 @@ type Block struct {
 
 type Link struct {
 	Next      int64
-	CgFirst    int64
+	CgFirst   int64
 	Data      int64
 	MdComment int64
 }
