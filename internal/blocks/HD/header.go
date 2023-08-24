@@ -36,7 +36,7 @@ type Data struct {
 	StartDistM    float64
 }
 
-var blockID string = blocks.HdID
+const blockID string = blocks.HdID
 
 // New() seek and read to Block struct based on startAddress and blockSize
 func New(file *os.File, startAdress int64) *Block {

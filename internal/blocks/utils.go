@@ -14,6 +14,8 @@ type Header struct {
 	LinkCount uint64
 }
 
+type LinkType map[string]int64
+ 
 func NewBuffer(file *os.File, startAdress int64, BLOCK_SIZE int) *bytes.Buffer {
 	bytesValue := seekBinaryByAddress(file, startAdress, BLOCK_SIZE)
 	return bytes.NewBuffer(bytesValue)
@@ -81,3 +83,4 @@ func LoadBuffer(file *os.File, blockSize uint64) *bytes.Buffer {
 
 	return bytes.NewBuffer(buf)
 }
+

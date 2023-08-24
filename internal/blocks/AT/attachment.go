@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
-	"github.com/LincolnG4/GoMDF/internal/blocks/MD"
 )
 
 type Block struct {
@@ -37,8 +36,7 @@ type DynamicData struct {
 	EmbeddedData []byte
 }
 
-var blockID string = blocks.AtID
-
+const blockID string = blocks.AtID
 
 func New(file *os.File, startAdress int64) *Block{
 	var b Block
@@ -133,13 +131,3 @@ func (b *Block) BlankBlock() *Block {
 	}
 }
 
-func (b *Block) ReadMdComment(file *os.File, startAdress int64) *MD.Block {
-	mdBlock := MD.Block{}
-	mdBlock.New(file, startAdress)
-
-	fmt.Printf("\n%+s\n", mdBlock.Header.ID)
-	fmt.Printf("%+v\n", mdBlock.Header)
-	
-
-	return &mdBlock
-}

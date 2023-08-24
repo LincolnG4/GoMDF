@@ -122,7 +122,7 @@ func (m *MF4) read(getXML bool) {
 	m.Groups = make(map[string]*Group)
 
 	var cnBlock CN.Block
-	var cgBlock CG.Block
+	
 
 	//Get all DataGroup
 	for NextAddressDG != 0 {
@@ -130,31 +130,24 @@ func (m *MF4) read(getXML bool) {
 		//Store group
 		grp := Group{}
 
-		dgBlock := DG.Block{}
-		grp.DataGroup = &dgBlock
+		//Creat DGBlock
+		dgBlock := DG.New(file, NextAddressDG)
 
-		dgBlock.New(file, NextAddressDG, blocks.DgblockSize)
-
-		fmt.Printf("%s\n", dgBlock.Header.ID)
-		fmt.Printf("%+v\n", dgBlock.Header)
-		fmt.Printf("%+v\n", dgBlock.Link)
-		fmt.Printf("%+v\n", dgBlock.Data)
+		//Read MdBlocks inside
+		mdCommentAddr := dgBlock.Link.MdComment
+		if mdCommentAddr != 0 {
+			mdBlock := MD.ReadMdComment(file, mdCommentAddr)
+			comment := mdBlock.Data.Value
+			fmt.Printf("%s\n", comment)
+		}
 
 		//From DGBLOCK read ChannelGroup
-		NextAddressCG := dgBlock.Link.CGNext
+		NextAddressCG := dgBlock.Link.CgFirst
 		indexCG := 0
 
 		for NextAddressCG != 0 {
+			cgBlock := CG.New(file,m.Identification.VersionNumber,NextAddressCG)
 
-			cgBlock = CG.Block{}
-			grp.ChannelGroup = &cgBlock
-
-			cgBlock.New(file, NextAddressCG)
-
-			fmt.Printf("%+v\n", cgBlock.Link)
-			fmt.Printf("%+v\n\n", cgBlock.Data)
-
-			//debug(file, cgBlock.TxAcqName, 88)
 			//From CGBLOCK read Channel
 			nextAddressCN := cgBlock.Link.CnFirst
 			indexCN := 0
@@ -162,7 +155,7 @@ func (m *MF4) read(getXML bool) {
 			// mapCN := make(map[int]*blocks.CG)
 			for nextAddressCN != 0 {
 				cnBlock = CN.Block{}
-				grp.ChannelGroup = &cgBlock
+				
 
 				cnBlock.New(file, nextAddressCN)
 				fmt.Printf("%s\n", cnBlock.Header.ID)
@@ -293,7 +286,7 @@ func (m *MF4) LoadAttachmemt(file *os.File, startAddressAT int64) {
 		//Read MDComment
 		MdCommentAdress := atBlock.Link.MDComment
 		if MdCommentAdress != 0 {
-			mdBlock := atBlock.ReadMdComment(file, MdCommentAdress)
+			mdBlock := MD.ReadMdComment(file, MdCommentAdress)
 			comment := mdBlock.Data.Value
 			fmt.Printf("%s\n", comment)
 		}
@@ -320,7 +313,7 @@ func (m *MF4) LoadFileHistory(file *os.File, startAddressFH int64, getXML bool) 
 		
 		//Read MDComment
 		if MdCommentAdress != 0 {
-			comment := fhBlock.ReadMdComment(file, MdCommentAdress)
+			comment := MD.ReadMdComment(file, MdCommentAdress)
 			fmt.Printf("%s\n", comment.Data)
 		}
 

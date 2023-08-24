@@ -18,8 +18,7 @@ type Block struct {
 	Data   Data
 }
 
-var blockID string = blocks.TxID
-
+const blockID string = blocks.TxID
 
 func New(file *os.File, startAdress int64) *Block {
 	var blockSize uint64 = blocks.HeaderSize

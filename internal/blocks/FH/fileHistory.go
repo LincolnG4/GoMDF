@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
-	"github.com/LincolnG4/GoMDF/internal/blocks/MD"
 )
 
 type Block struct {
@@ -29,7 +28,7 @@ type Data struct {
 	Reserved     [3]byte
 }
 
-var blockID string = blocks.FhID
+const blockID string = blocks.FhID
 
 func New(file *os.File, startAdress int64) *Block {
 	var blockSize uint64 = blocks.HeaderSize
@@ -104,12 +103,3 @@ func (b *Block) BlankBlock() *Block {
 	}
 }
 
-func (b *Block) ReadMdComment(file *os.File, startAdress int64) *MD.Block {
-	mdBlock := MD.Block{}
-	mdBlock.New(file, startAdress)
-
-	fmt.Printf("\n%+s", mdBlock.Header.ID)
-	fmt.Printf("\n%+v\n", mdBlock.Header)
-
-	return &mdBlock
-}
