@@ -26,8 +26,8 @@ type Link struct {
 type Data struct {
 	Flags        uint16
 	CreatorIndex uint16
-	Reserved     [4]byte
-	MD5Checksum  [16]byte
+	Reserved     uint8
+	MD5Checksum  uint8
 	OriginalSize uint64
 	EmbeddedSize uint64
 }

@@ -49,6 +49,10 @@ func (b *Block) New(file *os.File, startAdress int64) {
 
 	}
 
+	fmt.Printf("\n%s\n", b.Header.ID)
+	fmt.Printf("%+v\n", b.Header)
+	fmt.Printf("%s\n", b.Data)
+
 }
 
 func (b *Block) BlankBlock() Block {

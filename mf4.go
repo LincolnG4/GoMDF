@@ -1,8 +1,6 @@
 package mf4
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +10,6 @@ import (
 	"github.com/LincolnG4/GoMDF/internal/blocks/CG"
 	"github.com/LincolnG4/GoMDF/internal/blocks/CN"
 	"github.com/LincolnG4/GoMDF/internal/blocks/DG"
-	"github.com/LincolnG4/GoMDF/internal/blocks/DT"
 	"github.com/LincolnG4/GoMDF/internal/blocks/FH"
 	"github.com/LincolnG4/GoMDF/internal/blocks/HD"
 	"github.com/LincolnG4/GoMDF/internal/blocks/ID"
@@ -125,8 +122,7 @@ func (m *MF4) read(getXML bool) {
 	//Get all DataGroup
 	for NextAddressDG != 0 {
 
-		//Store group
-		grp := Group{}
+
 
 		//Creat DGBlock
 		dgBlock := DG.New(file, NextAddressDG)
@@ -154,20 +150,13 @@ func (m *MF4) read(getXML bool) {
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
 
-				
-				fmt.Printf("%s\n", cnBlock.Header.ID)
-				fmt.Printf("%+v\n", cnBlock.Header)
-				fmt.Printf("%+v\n", cnBlock.Link)
-				fmt.Printf("%+v\n\n", cnBlock.Data)
-
 				txBlock := TX.New(file, int64(cnBlock.Link.TxName))
 
 				channelName := string(txBlock.Data.TxData)
 				channelMap := make(map[string]*CN.Block)
 				channelMap[channelName] = cnBlock
 
-				grp.Channels = &channelMap
-				//fmt.Println(channelName)
+
 
 				//Get XML comments
 				MdCommentAdress := cnBlock.Link.MdComment
@@ -176,9 +165,6 @@ func (m *MF4) read(getXML bool) {
 					mdBlock.New(file, MdCommentAdress)
 					//mdComment := string(mdBlock.MdData.Value)
 
-					fmt.Printf("%+v\n", mdBlock.Header)
-					fmt.Printf("%+s\n\n", mdBlock.Data)
-
 					//debug(file,MdCommentAdress,500)
 				} else {
 					mdBlock := (&MD.Block{}).BlankBlock()
@@ -186,54 +172,6 @@ func (m *MF4) read(getXML bool) {
 					fmt.Print(mdComment, mdBlock, "\n")
 				}
 
-				//debug(file, int64(dgBlock.Data), 1000)
-				fmt.Printf("%+v", cnBlock)
-
-				// // signal data
-				// if cnBlock.Data != 0 {
-				// 	cnBlock.GetSignalData(file,dgBlock.Data,dgBlock.RecIDSize, dgBlock.Header.Length)
-				// }else{
-				// 	fmt.Println("")
-				// }
-
-				// if cnBlock.CnComposition != 0 {
-				// 	cnBlock.GetSignalData(file)
-				// }else{
-				// 	fmt.Println("")
-				// }
-				dtBlock := DT.Block{}
-
-				dataAddress := dgBlock.Link.Data
-				dtBlock.New(file, dataAddress)
-
-				//CnDataType := cnBlock.Data.DataType
-				numberBits := cnBlock.Data.BitCount
-				offsetByte := cnBlock.Data.ByteOffset
-				//offsetBit := cnBlock.Data.BitOffset
-				//invalidBit := cnBlock.Data.InvalBitPos
-
-				//databytesLeng := cgBlock.Data.DataBytes
-				skipSignalAddr := dataAddress + int64(dgBlock.Data.RecIDSize) + int64(offsetByte)
-
-				buf := make([]byte, numberBits)
-				_, errs := file.Seek(skipSignalAddr, 0)
-				if errs != nil {
-					if errs != io.EOF {
-						fmt.Println(errs)
-					}
-
-				}
-				reader := bytes.NewReader(buf)
-				debug(file, skipSignalAddr, int(numberBits))
-				for {
-					var value uint32
-					err := binary.Read(reader, binary.LittleEndian, &value)
-					if err != nil {
-						// Exit the loop if no more data can be read
-						break
-					}
-					fmt.Printf("Read value: %d\n", value)
-				}
 
 				nextAddressCN = cnBlock.Link.Next
 				indexCN++
@@ -246,16 +184,6 @@ func (m *MF4) read(getXML bool) {
 			indexCG++
 		}
 
-		//Read data
-
-		// dataAddress := dgBlock.Link.Data
-		// dtBlock := DT.Block{}
-		// dtBlock.New(file, dataAddress, 50)
-
-		// fmt.Printf("\n%s\n", dtBlock.Header.ID)
-		// fmt.Printf("%+v\n", dtBlock.Header)
-		// fmt.Printf("%+v\n", dtBlock.Link)
-		// fmt.Printf("%+v\n\n", dtBlock.Data)
 
 		NextAddressDG = dgBlock.Link.Next
 		index++
