@@ -2,6 +2,7 @@ package blocks
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -83,3 +84,20 @@ func LoadBuffer(file *os.File, blockSize uint64) *bytes.Buffer {
 
 	return bytes.NewBuffer(buf)
 }
+
+func ReadInt64FromBinary(file *os.File) int64 {
+	var value int64
+	if err := binary.Read(file, binary.LittleEndian, &value); err != nil {
+		fmt.Println("Error reading binary data:", err)
+	}
+	return value
+}
+
+func ReadAllFromBinary(file *os.File) int64 {
+	var value int64
+	if err := binary.Read(file, binary.LittleEndian, &value); err != nil {
+		fmt.Println("Error reading binary data:", err)
+	}
+	return value
+}
+

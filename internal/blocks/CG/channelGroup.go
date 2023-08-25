@@ -22,15 +22,15 @@ type Link struct {
 	SiAcqSource int64
 	SrFirst     int64
 	MdComment   int64
-	CgMaster    int64 //Version4.2
+	CgMaster    int64 // Version 4.2
 }
 
 type Data struct {
 	RecordId      uint64
 	CycleCount    uint64
 	Flags         uint16
-	PathSeparator uint16
-	Reserved      [4]byte
+	PathSeparator uint16  // Version 4.1
+	Reserved      uint8
 	DataBytes     uint32
 	InvalBytes    uint32
 }
@@ -41,14 +41,14 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	var blockSize uint64 = blocks.HeaderSize
 	var b Block
 
+	b.Header = blocks.Header{}
+
 	_, errs := file.Seek(startAdress, 0)
 	if errs != nil {
 		if errs != io.EOF {
 			fmt.Println(errs, "Memory Addr out of size")
 		}
 	}
-
-	b.Header = blocks.Header{}
 
 	//Create a buffer based on blocksize
 	buf := blocks.LoadBuffer(file, blockSize)
@@ -69,50 +69,49 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 	//Calculates size of Link Block
 	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
-	b.Link = Link{}
 	buffEach := make([]byte, blockSize)
 
 	// Read the Link section from the binary file
-	BinaryError = binary.Read(file, binary.LittleEndian, &buffEach)
-	if BinaryError != nil {
-		fmt.Println("Error reading Link section:", BinaryError)
+	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
+		fmt.Println("Error reading Link section:", err)
+	}
+
+	// Populate the Link fields dynamically based on version
+	linkFields := []int64{}
+	for i := 0; i < len(buffEach)/8; i++ {
+		linkFields = append(linkFields, int64(binary.LittleEndian.Uint64(buffEach[i*8:(i+1)*8])))
+	}
+
+	b.Link = Link{
+		Next:        linkFields[0],
+		CnFirst:     linkFields[1],
+		TxAcqName:   linkFields[2],
+		SiAcqSource: linkFields[3],
+		SrFirst:     linkFields[4],
+		MdComment:   linkFields[5],
+	}
+
+	
+	if version >= 420 {
+		linkFields = append(linkFields, blocks.ReadInt64FromBinary(file))
+		b.Link.CgMaster = linkFields[6]
 	}
 	
-	// Populate the Link fields
-	b.Link.Next 		= int64(binary.LittleEndian.Uint64(buffEach[0:8]))
-	b.Link.CnFirst  	= int64(binary.LittleEndian.Uint64(buffEach[8:16]))
-	b.Link.TxAcqName 	= int64(binary.LittleEndian.Uint64(buffEach[16:24]))
-	b.Link.SiAcqSource 	= int64(binary.LittleEndian.Uint64(buffEach[24:32]))
-	b.Link.SrFirst 		= int64(binary.LittleEndian.Uint64(buffEach[32:40]))
-	b.Link.MdComment 	= int64(binary.LittleEndian.Uint64(buffEach[40:48]))
-
-	if version >= 420 {
-		BinaryError = binary.Read(file, binary.LittleEndian, &b.Link.CgMaster)
-		if BinaryError != nil {
-			fmt.Println("Error reading cg_cg_master:", BinaryError)
-		}
-	}
 	fmt.Printf("%+v\n", b.Link)
 
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
-	b.Data = Data{}
 	buf = blocks.LoadBuffer(file, blockSize)
-	
-	// if version >= 410{
-	// 	b.Data.Reserved = [4]byte{}
-	// }
-	
-	//Create a buffer based on blocksize
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+
+	// Create a buffer based on block size
+	if err := binary.Read(buf, binary.LittleEndian, &b.Data); err != nil {
+		fmt.Println("ERROR ddd", err)
 	}
 
-	
-
+	fmt.Printf("%+v\n", b.Data)
 
 	return &b
+
 }
 
 func (b *Block) BlankBlock() *Block {
@@ -123,14 +122,7 @@ func (b *Block) BlankBlock() *Block {
 			Length:    blocks.CgblockSize,
 			LinkCount: 0,
 		},
-		Link: Link{
-			Next:        0,
-			CnFirst:     0,
-			TxAcqName:   0,
-			SiAcqSource: 0,
-			SrFirst:     0,
-			MdComment:   0,
-		},
+		Link: Link{},
 		Data: Data{},
 	}
 }

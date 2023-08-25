@@ -3,15 +3,16 @@ package CN
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 )
 
 type Block struct {
-	Header *blocks.Header
-	Link   *Link
-	Data   *Data
+	Header blocks.Header
+	Link   Link
+	Data   Data
 }
 
 type Link struct {
@@ -23,8 +24,8 @@ type Link struct {
 	Data         int64
 	MdUnit       int64
 	MdComment    int64
-	AtReference  int64
-	DefaultX     int64
+	AtReference  int64 //Version 4.1
+	DefaultX     int64 //Version 4.1
 }
 
 type Data struct {
@@ -37,8 +38,8 @@ type Data struct {
 	Flags           uint32
 	InvalBitPos     uint32
 	Precision       uint8
-	Reserved        [3]byte
-	AttachmentCount uint16
+	Reserved        uint8 // Use [1]byte for versions >= 4.1
+	AttachmentCount uint16 //Version 4.1
 	ValRangeMin     float64
 	ValRangeMax     float64
 	LimitMin        float64
@@ -47,48 +48,113 @@ type Data struct {
 	LimitExtMax     float64
 }
 
-func (b *Block) New(file *os.File, startAdress int64) {
-	//Read Header Section
-	b.Header = &blocks.Header{}
-	buffer := blocks.NewBuffer(file, startAdress, blocks.HeaderSize)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)
+const blockID string = blocks.CnID
 
-	if string(b.Header.ID[:]) != blocks.CnID {
-		fmt.Printf("ERROR NOT %s", blocks.CnID)
+func New(file *os.File, version uint16, startAdress int64) *Block {
+	var blockSize uint64 = blocks.HeaderSize
+	var b Block
+
+	b.Header = blocks.Header{}
+
+	_, errs := file.Seek(startAdress, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "Memory Addr out of size")
+		}
 	}
 
+	//Create a buffer based on blocksize
+	buf := blocks.LoadBuffer(file, blockSize)
+
+	//Read header
+	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
 	}
 
-	//Read Link Section
-	linkAddress := startAdress + blocks.HeaderSize
-	linkSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	b.Link = &Link{}
-	buffer = blocks.NewBuffer(file, linkAddress, int(linkSize))
-	BinaryError = binary.Read(buffer, binary.LittleEndian, b.Link)
-
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+	if string(b.Header.ID[:]) != blockID {
+		fmt.Printf("ERROR NOT %s", blockID)
 	}
 
-	//Read Data Section
-	dataAddress := linkAddress + int64(linkSize)
-	dataSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	fmt.Printf("\n%s\n", b.Header.ID)
+	fmt.Printf("%+v\n", b.Header)
 
-	b.Data = &Data{}
-	buffer = blocks.NewBuffer(file, dataAddress, int(dataSize))
-	BinaryError = binary.Read(buffer, binary.LittleEndian, b.Data)
+	//Calculates size of Link Block
+	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
+	buffEach := make([]byte, blockSize)
 
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+	// Read the Link section from the binary file
+	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
+		fmt.Println("Error reading Link section:", err)
 	}
+
+	// Populate the Link fields dynamically based on version
+	linkFields := []int64{}
+	for i := 0; i < len(buffEach)/8; i++ {
+		linkFields = append(linkFields, int64(binary.LittleEndian.Uint64(buffEach[i*8:(i+1)*8])))
+	}
+
+	// Handle version-specific fields in Link based on the version
+	if version >= 420 {
+		linkFields = append(linkFields, blocks.ReadInt64FromBinary(file))
+	}
+
+	b.Link = Link{
+		Next:         linkFields[0],
+		Composition:  linkFields[1],
+		TxName:       linkFields[2],
+		SiSource:     linkFields[3],
+		CcConvertion: linkFields[4],
+		Data:         linkFields[5],
+		MdUnit:       linkFields[6],
+		MdComment:    linkFields[7],
+	}
+
+	fmt.Printf("%+v\n", b.Link)
+
+	//Calculates size of Data Block
+	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	buf = blocks.LoadBuffer(file, blockSize)
+	
+	// Create a buffer based on block size
+	if err := binary.Read(buf, binary.LittleEndian, &b.Data); err != nil {
+		fmt.Println("ERROR", err)
+	}
+
+	if version < 410 {
+		return &b
+	}
+
+	//Handling versions >= 4.10 
+	for i := 0; i < int(b.Data.AttachmentCount); i++{
+		b.Link.AtReference = linkFields[8]
+	}
+
+	if b.Data.Flags == 12 {
+		b.Link.DefaultX    = linkFields[9]
+		b.Link.DefaultX    = linkFields[10]
+		b.Link.DefaultX    = linkFields[11]
+		fmt.Println("DefaultX Flagged")
+	}
+	
+	fmt.Printf("%+v\n", b.Data)
+
+	return &b
 
 }
 
-func (b *Block) BlankBlock() Block {
-	return Block{}
+func (b *Block) BlankBlock() *Block {
+	return &Block{
+		Header: blocks.Header{
+			ID:        [4]byte{'#', '#', 'C', 'N'},
+			Reserved:  [4]byte{},
+			Length:    blocks.CnblockSize,
+			LinkCount: 0,
+		},
+		Link: Link{},
+		Data: Data{},
+	}
 }
 
 func (b *Block) GetSignalData(file *os.File, startAdress uint64, recordsize uint8, size uint64) {

@@ -110,6 +110,7 @@ func (m *MF4) read(getXML bool) {
 
 	//From HDBLOCK read File History
 	m.LoadFileHistory(file, hdBlock.Link.FhFirst, getXML)
+	version :=  m.Identification.VersionNumber
 
 	//From HDBLOCK read Attachments
 	//Get all AT
@@ -120,8 +121,6 @@ func (m *MF4) read(getXML bool) {
 	index := 0
 
 	m.Groups = make(map[string]*Group)
-
-	var cnBlock CN.Block
 
 	//Get all DataGroup
 	for NextAddressDG != 0 {
@@ -145,7 +144,7 @@ func (m *MF4) read(getXML bool) {
 		indexCG := 0
 
 		for NextAddressCG != 0 {
-			cgBlock := CG.New(file, m.Identification.VersionNumber, NextAddressCG)
+			cgBlock := CG.New(file, version, NextAddressCG)
 
 			//From CGBLOCK read Channel
 			nextAddressCN := cgBlock.Link.CnFirst
@@ -153,18 +152,19 @@ func (m *MF4) read(getXML bool) {
 
 			// mapCN := make(map[int]*blocks.CG)
 			for nextAddressCN != 0 {
-				cnBlock = CN.Block{}
+				cnBlock := CN.New(file, version, nextAddressCN)
 
-				cnBlock.New(file, nextAddressCN)
+				
 				fmt.Printf("%s\n", cnBlock.Header.ID)
 				fmt.Printf("%+v\n", cnBlock.Header)
 				fmt.Printf("%+v\n", cnBlock.Link)
 				fmt.Printf("%+v\n\n", cnBlock.Data)
 
 				txBlock := TX.New(file, int64(cnBlock.Link.TxName))
+
 				channelName := string(txBlock.Data.TxData)
 				channelMap := make(map[string]*CN.Block)
-				channelMap[channelName] = &cnBlock
+				channelMap[channelName] = cnBlock
 
 				grp.Channels = &channelMap
 				//fmt.Println(channelName)
