@@ -25,7 +25,7 @@ type Data struct {
 	TZOffsetMin  int16
 	DSTOffsetMin int16
 	TimeFlags    uint8
-	Reserved     uint8
+	Reserved     [3]byte
 }
 
 const blockID string = blocks.FhID

@@ -13,7 +13,7 @@ type Block struct {
 	Header       blocks.Header
 	Link         Link
 	Data         Data
-	EmbeddedData DynamicData
+
 }
 
 type Link struct {
@@ -26,15 +26,14 @@ type Link struct {
 type Data struct {
 	Flags        uint16
 	CreatorIndex uint16
-	Reserved     uint8
-	MD5Checksum  uint8
+	Reserved     [4]byte
+	MD5Checksum  [16]byte
 	OriginalSize uint64
 	EmbeddedSize uint64
-}
-
-type DynamicData struct {
 	EmbeddedData []byte
 }
+
+
 
 const blockID string = blocks.AtID
 
@@ -83,36 +82,40 @@ func New(file *os.File, startAdress int64) *Block {
 
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	buffEach := make([]byte, blockSize)
+
+	// Read the Link section from the binary file
+	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
+		fmt.Println("Error reading Link section:", err)
+	}
+	
+	
+	var fixedArray16 [16]byte
+	
+	
+	
+	// OriginalSize uint64
+	// EmbeddedSize uint64
+	// EmbeddedData []byte
 	b.Data = Data{}
-	//Create a buffer based on blocksize
-	buf = blocks.LoadBuffer(file, blockSize)
+	b.Data.Flags        = binary.LittleEndian.Uint16(buffEach[0:2]) 
+	b.Data.CreatorIndex = binary.LittleEndian.Uint16(buffEach[2:4])
+	
+	//reserved
+	//var fixedArray4 [4]byte
+	// reserved := buffEach[4:8]
+	// copy(fixedArray4[:], reserved[:])
+	// b.Data.Reserved = fixedArray4
+	
+	//md5CheckSum
+	md5CheckSum := buffEach[8:24]
+	copy(fixedArray16[:], md5CheckSum[:])
+	b.Data.MD5Checksum = fixedArray16
 
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
-	}
-	fmt.Printf("%+v\n\n", b.Data)
-
-	//Calculates size of DynamicData Block
-	blockSize = b.Data.EmbeddedSize
-
-	b.EmbeddedData = DynamicData{EmbeddedData: make([]byte, b.Data.EmbeddedSize)}
-	buff := make([]byte, blockSize)
-
-	_, err := file.Read(buff)
-	if err != nil {
-		if err != io.EOF {
-			fmt.Println("LoadBuffer error: ", err)
-		}
-	}
-
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.EmbeddedData.EmbeddedData)
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
-	}
-
-	fmt.Printf("%s\n\n", string(b.EmbeddedData.EmbeddedData))
-
+	b.Data.OriginalSize = binary.LittleEndian.Uint64(buffEach[24:32])
+	b.Data.EmbeddedSize = binary.LittleEndian.Uint64(buffEach[32:40])
+	b.Data.EmbeddedSize = binary.LittleEndian.Uint64(buffEach[40:b.Data.EmbeddedSize])
+	
 	return &b
 }
 
@@ -126,6 +129,6 @@ func (b *Block) BlankBlock() *Block {
 		},
 		Link:         Link{},
 		Data:         Data{},
-		EmbeddedData: DynamicData{},
+		
 	}
 }
