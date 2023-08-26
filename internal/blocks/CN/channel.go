@@ -25,7 +25,7 @@ type Link struct {
 	MdUnit       int64
 	MdComment    int64
 	AtReference  int64 //Version 4.1
-	DefaultX     int64 //Version 4.1
+	DefaultX     [3]int64 //Version 4.1
 }
 
 type Data struct {
@@ -132,9 +132,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	}
 
 	if b.Data.Flags == 12 {
-		b.Link.DefaultX    = linkFields[9]
-		b.Link.DefaultX    = linkFields[10]
-		b.Link.DefaultX    = linkFields[11]
+		b.Link.DefaultX = [3]int64{linkFields[9],linkFields[10],linkFields[11]}
 		fmt.Println("DefaultX Flagged")
 	}
 	

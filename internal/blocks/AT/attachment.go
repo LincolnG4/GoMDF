@@ -92,20 +92,9 @@ func New(file *os.File, startAdress int64) *Block {
 	
 	var fixedArray16 [16]byte
 	
-	
-	
-	// OriginalSize uint64
-	// EmbeddedSize uint64
-	// EmbeddedData []byte
 	b.Data = Data{}
 	b.Data.Flags        = binary.LittleEndian.Uint16(buffEach[0:2]) 
 	b.Data.CreatorIndex = binary.LittleEndian.Uint16(buffEach[2:4])
-	
-	//reserved
-	//var fixedArray4 [4]byte
-	// reserved := buffEach[4:8]
-	// copy(fixedArray4[:], reserved[:])
-	// b.Data.Reserved = fixedArray4
 	
 	//md5CheckSum
 	md5CheckSum := buffEach[8:24]
