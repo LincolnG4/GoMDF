@@ -38,7 +38,7 @@ type Data struct {
 	Flags           uint32
 	InvalBitPos     uint32
 	Precision       uint8
-	Reserved        uint8 // Use [1]byte for versions >= 4.1
+	Reserved        uint8  // Use [1]byte for versions >= 4.1
 	AttachmentCount uint16 //Version 4.1
 	ValRangeMin     float64
 	ValRangeMax     float64

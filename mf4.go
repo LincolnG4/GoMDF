@@ -107,7 +107,7 @@ func (m *MF4) read(getXML bool) {
 
 	//From HDBLOCK read File History
 	m.LoadFileHistory(file, hdBlock.Link.FhFirst, getXML)
-	version :=  m.Identification.VersionNumber
+	version := m.Identification.VersionNumber
 
 	//From HDBLOCK read Attachments
 	//Get all AT
@@ -121,8 +121,6 @@ func (m *MF4) read(getXML bool) {
 
 	//Get all DataGroup
 	for NextAddressDG != 0 {
-
-
 
 		//Creat DGBlock
 		dgBlock := DG.New(file, NextAddressDG)
@@ -149,14 +147,11 @@ func (m *MF4) read(getXML bool) {
 			// mapCN := make(map[int]*blocks.CG)
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
-
 				txBlock := TX.New(file, int64(cnBlock.Link.TxName))
 
 				channelName := string(txBlock.Data.TxData)
 				channelMap := make(map[string]*CN.Block)
 				channelMap[channelName] = cnBlock
-
-
 
 				//Get XML comments
 				MdCommentAdress := cnBlock.Link.MdComment
@@ -172,6 +167,21 @@ func (m *MF4) read(getXML bool) {
 					fmt.Print(mdComment, mdBlock, "\n")
 				}
 
+				//Start Read Signal
+		
+				readAddr := 24 + dgBlock.Link.Data + int64(dgBlock.Data.RecIDSize) + int64(cnBlock.Data.ByteOffset)*8
+				size := cnBlock.Data.BitCount
+				buf := make([]byte, size)
+				_, errs := file.Seek(readAddr, 0)
+				if errs != nil {
+					if errs != io.EOF {
+						fmt.Println(errs, "Memory Addr out of size")
+					}
+				}
+				file.Read(buf[:cap(buf)])
+				fmt.Println(buf)
+
+				//End Read Signal
 
 				nextAddressCN = cnBlock.Link.Next
 				indexCN++
@@ -183,7 +193,6 @@ func (m *MF4) read(getXML bool) {
 			NextAddressCG = cgBlock.Link.Next
 			indexCG++
 		}
-
 
 		NextAddressDG = dgBlock.Link.Next
 		index++
