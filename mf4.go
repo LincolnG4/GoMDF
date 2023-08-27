@@ -32,7 +32,7 @@ type Channel struct {
 	ChannelGroup *CG.Block
 }
 
-func ReadFile(file *os.File, getXML bool) *MF4 {
+func ReadFile(file *os.File, getXML bool) (*MF4,error) {
 	var address int64 = 0
 
 	//fileInfo, _ := file.Stat()
@@ -51,21 +51,25 @@ func ReadFile(file *os.File, getXML bool) *MF4 {
 		idBlock.VersionNumber,
 		idBlock.Reserved2)
 
-	if idBlock.VersionNumber >= 410 {
+	fileVersion := idBlock.VersionNumber 
+
+	if fileVersion < 400{
+		return nil,&VersionError{}
+	}
+	
+	if fileVersion >= 410 {
 		mf4File.read(getXML)
 	}
 
-	if idBlock.VersionNumber >= 420 {
+	if fileVersion >= 420 {
 		fmt.Print("ADDING COLUMN STORE")
 		//ADD COLUMN STORAGE
 	}
 
-	return &mf4File
+	return &mf4File, nil
 }
 
-func (m *MF4) Version() string {
-	return string(m.Identification.Version[:])
-}
+
 
 func (m *MF4) read(getXML bool) {
 	var file *os.File = m.File
@@ -231,6 +235,7 @@ func (m *MF4) ChannelNames() []string {
 	return channelNames
 }
 
+
 // loadAttachmemt iterates over all AT blocks and append array to MF4 object
 func (m *MF4) loadAttachmemt(file *os.File, startAddressAT int64) {
 	var index int = 0
@@ -289,6 +294,10 @@ func (m *MF4) loadFileHistory(file *os.File, startAddressFH int64, getXML bool) 
 	}
 	m.FileHistory = array
 
+}
+
+func (m *MF4) Version() string {
+	return string(m.Identification.Version[:])
 }
 
 func debug(file *os.File, offset int64, size int) {

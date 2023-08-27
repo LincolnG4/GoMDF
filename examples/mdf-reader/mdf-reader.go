@@ -21,7 +21,10 @@ func main() {
 
 	defer file.Close()
 	
-	m := mf4.ReadFile(file,true)
+	m, err := mf4.ReadFile(file,true)
+	if err != nil{
+		fmt.Println(err)
+	}
 	version := m.Version()
 	fmt.Print(version)
 
