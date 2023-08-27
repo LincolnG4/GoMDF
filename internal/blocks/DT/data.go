@@ -3,62 +3,57 @@ package DT
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 )
 
 type Block struct {
-	Header *blocks.Header
-	Link   *Link
-	Data   *Data
+	Header blocks.Header
+	Data   []byte
 }
 
-type Link struct {
-}
+const blockID string = blocks.DtID
 
-type Data struct {
-	Data []byte
-}
+func New(file *os.File, startAdress int64) *Block {
+	var blockSize uint64 = blocks.HeaderSize
+	var b Block
 
-func (b *Block) New(file *os.File, startAdress int64) {
-	//Read Header Section
-	b.Header = &blocks.Header{}
-	buffer := blocks.NewBuffer(file, startAdress, blocks.HeaderSize)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)
-
-	if string(b.Header.ID[:]) != blocks.DtID {
-		fmt.Printf("ERROR NOT %s", blocks.DtID)
+	_, errs := file.Seek(startAdress, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "Memory Addr out of size")
+		}
 	}
 
+	b.Header = blocks.Header{}
+
+	//Create a buffer based on blocksize
+	buf := blocks.LoadBuffer(file, blockSize)
+
+	//Read header
+	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
 	}
 
-	//Read Data Section
-	dataAddress := startAdress + 24
-	dataSize := int(b.Header.Length - 24)
-
-	b.Data = &Data{}
-	buffer = blocks.NewBuffer(file, dataAddress, dataSize)
-	BinaryError = binary.Read(buffer, binary.LittleEndian, b.Data)
-
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+	if string(b.Header.ID[:]) != blockID {
+		fmt.Printf("ERROR NOT %s", blockID)
 	}
 
+	return &b
 }
 
-func (b *Block) BlankBlock() Block {
-	return Block{
-		Header: &blocks.Header{
+func (b *Block) BlankBlock() *Block {
+	return &Block{
+		Header: blocks.Header{
 			ID:        [4]byte{'#', '#', 'D', 'T'},
 			Reserved:  [4]byte{},
 			Length:    64,
 			LinkCount: 4,
 		},
-		Link: &Link{},
-		Data: &Data{},
+		Data: []byte{},
 	}
 }

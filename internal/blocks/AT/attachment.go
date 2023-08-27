@@ -10,10 +10,9 @@ import (
 )
 
 type Block struct {
-	Header       blocks.Header
-	Link         Link
-	Data         Data
-
+	Header blocks.Header
+	Link   Link
+	Data   Data
 }
 
 type Link struct {
@@ -32,8 +31,6 @@ type Data struct {
 	EmbeddedSize uint64
 	EmbeddedData []byte
 }
-
-
 
 const blockID string = blocks.AtID
 
@@ -88,14 +85,13 @@ func New(file *os.File, startAdress int64) *Block {
 	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
 		fmt.Println("Error reading Link section:", err)
 	}
-	
-	
+
 	var fixedArray16 [16]byte
-	
+
 	b.Data = Data{}
-	b.Data.Flags        = binary.LittleEndian.Uint16(buffEach[0:2]) 
+	b.Data.Flags = binary.LittleEndian.Uint16(buffEach[0:2])
 	b.Data.CreatorIndex = binary.LittleEndian.Uint16(buffEach[2:4])
-	
+
 	//md5CheckSum
 	md5CheckSum := buffEach[8:24]
 	copy(fixedArray16[:], md5CheckSum[:])
@@ -104,7 +100,7 @@ func New(file *os.File, startAdress int64) *Block {
 	b.Data.OriginalSize = binary.LittleEndian.Uint64(buffEach[24:32])
 	b.Data.EmbeddedSize = binary.LittleEndian.Uint64(buffEach[32:40])
 	b.Data.EmbeddedSize = binary.LittleEndian.Uint64(buffEach[40:b.Data.EmbeddedSize])
-	
+
 	return &b
 }
 
@@ -116,8 +112,7 @@ func (b *Block) BlankBlock() *Block {
 			Length:    blocks.AtblockSize,
 			LinkCount: 2,
 		},
-		Link:         Link{},
-		Data:         Data{},
-		
+		Link: Link{},
+		Data: Data{},
 	}
 }

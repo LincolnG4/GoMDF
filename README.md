@@ -6,10 +6,9 @@ Package based on <https://github.com/danielhrisca/asammdf>
 
 ## **Targets / Tasks**:
 - [ ] Read MF4 Files
-- [ ] Read any version of MDF file  
+- [ ] Write MF4 Files
 - [ ] Optimize  
-- [ ] Write MF4 Files  
-- [ ] Write any version of MDF file  
+- [ ] Read/Write any version of MDF file  
 - [ ] Optimize  
 
 ## Getting Started
@@ -50,9 +49,13 @@ func main() {
 
  defer file.Close()
  
- mf4 := mf4.ReadFile(file,true)
- version := mf4.Version()
+ m := mf4.ReadFile(file,true)
+ version := m.Version()
  fmt.Print(version)
+
+ //Return []string with channels name e.g [time,EngSpeed, ...]
+ channels := m.ChannelNames()
+ fmt.Println(channels)
 }
 
 ```

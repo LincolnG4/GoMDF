@@ -29,7 +29,7 @@ type Data struct {
 	RecordId      uint64
 	CycleCount    uint64
 	Flags         uint16
-	PathSeparator uint16  // Version 4.1
+	PathSeparator uint16 // Version 4.1
 	Reserved      uint8
 	DataBytes     uint32
 	InvalBytes    uint32
@@ -91,12 +91,11 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		MdComment:   linkFields[5],
 	}
 
-	
 	if version >= 420 {
 		linkFields = append(linkFields, blocks.ReadInt64FromBinary(file))
 		b.Link.CgMaster = linkFields[6]
 	}
-	
+
 	fmt.Printf("%+v\n", b.Link)
 
 	//Calculates size of Data Block

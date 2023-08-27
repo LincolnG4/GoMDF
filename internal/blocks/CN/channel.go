@@ -24,7 +24,7 @@ type Link struct {
 	Data         int64
 	MdUnit       int64
 	MdComment    int64
-	AtReference  int64 //Version 4.1
+	AtReference  int64    //Version 4.1
 	DefaultX     [3]int64 //Version 4.1
 }
 
@@ -116,7 +116,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
 	buf = blocks.LoadBuffer(file, blockSize)
-	
+
 	// Create a buffer based on block size
 	if err := binary.Read(buf, binary.LittleEndian, &b.Data); err != nil {
 		fmt.Println("ERROR", err)
@@ -126,16 +126,16 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		return &b
 	}
 
-	//Handling versions >= 4.10 
-	for i := 0; i < int(b.Data.AttachmentCount); i++{
+	//Handling versions >= 4.10
+	for i := 0; i < int(b.Data.AttachmentCount); i++ {
 		b.Link.AtReference = linkFields[8]
 	}
 
 	if b.Data.Flags == 12 {
-		b.Link.DefaultX = [3]int64{linkFields[9],linkFields[10],linkFields[11]}
+		b.Link.DefaultX = [3]int64{linkFields[9], linkFields[10], linkFields[11]}
 		fmt.Println("DefaultX Flagged")
 	}
-	
+
 	fmt.Printf("%+v\n", b.Data)
 
 	return &b

@@ -40,6 +40,7 @@ func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	}
 	return buf
 }
+
 func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) []byte {
 	if startAdress == 0 {
 		return []byte{}
@@ -100,4 +101,3 @@ func ReadAllFromBinary(file *os.File) int64 {
 	}
 	return value
 }
-

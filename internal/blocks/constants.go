@@ -24,4 +24,3 @@ const (
 	CgblockSize = 104
 	CnblockSize = 160
 )
-
