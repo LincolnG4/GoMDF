@@ -1,6 +1,7 @@
 package mf4
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -32,7 +33,7 @@ type Channel struct {
 	ChannelGroup *CG.Block
 }
 
-func ReadFile(file *os.File, getXML bool) (*MF4,error) {
+func ReadFile(file *os.File, getXML bool) (*MF4, error) {
 	var address int64 = 0
 
 	//fileInfo, _ := file.Stat()
@@ -51,12 +52,12 @@ func ReadFile(file *os.File, getXML bool) (*MF4,error) {
 		idBlock.VersionNumber,
 		idBlock.Reserved2)
 
-	fileVersion := idBlock.VersionNumber 
+	fileVersion := idBlock.VersionNumber
 
-	if fileVersion < 400{
-		return nil,&VersionError{}
+	if fileVersion < 400 {
+		return nil, &VersionError{}
 	}
-	
+
 	if fileVersion >= 410 {
 		mf4File.read(getXML)
 	}
@@ -68,8 +69,6 @@ func ReadFile(file *os.File, getXML bool) (*MF4,error) {
 
 	return &mf4File, nil
 }
-
-
 
 func (m *MF4) read(getXML bool) {
 	var file *os.File = m.File
@@ -119,7 +118,6 @@ func (m *MF4) read(getXML bool) {
 			nextAddressCN := cgBlock.Link.CnFirst
 			indexCN := 0
 
-			// mapCN := make(map[int]*blocks.CG)
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
 
@@ -129,9 +127,10 @@ func (m *MF4) read(getXML bool) {
 					DataGroup:    dgBlock,
 					ChannelGroup: cgBlock,
 				}
+				
 				txBlock := TX.New(file, int64(cnBlock.Link.TxName))
-
-				channelName := string(txBlock.Data.TxData)
+				
+				channelName :=string(bytes.Trim(txBlock.Data.TxData,"\x00"))
 				m.Channels[channelName] = channel
 
 				//Get XML comments
@@ -145,70 +144,6 @@ func (m *MF4) read(getXML bool) {
 					fmt.Print(mdComment, mdBlock, "\n")
 				}
 
-				// var i uint64
-
-				// readAddr := blocks.HeaderSize + dgBlock.Link.Data + int64(dgBlock.Data.RecIDSize) + int64(cnBlock.Data.ByteOffset)
-				// size := (cnBlock.Data.BitCount + uint32(cnBlock.Data.BitOffset)) / 8
-
-				// dataSlice := make([]byte, size)
-
-				// if cnBlock.Data.Type == 0 || cnBlock.Data.Type == 2 {
-				// 	if cnBlock.Data.DataType == 0 || cnBlock.Data.DataType == 2 || cnBlock.Data.DataType == 4 {
-				// 		//Start read signals
-				// 		for i = 0; i <= cgBlock.Data.CycleCount; i += 1 {
-				// 			_, errs := file.Seek(readAddr, 0)
-				// 			if errs != nil {
-				// 				if errs != io.EOF {
-				// 					fmt.Println(errs, "Memory Addr out of size")
-				// 				}
-				// 			}
-				// 			_, err := file.Read(dataSlice)
-				// 			if err != nil {
-				// 				if err != io.EOF {
-				// 					fmt.Println("LoadBuffer error: ", err)
-				// 				}
-				// 			}
-
-				// 			fmt.Print("")
-				// 			for _, x := range dataSlice {
-				// 				fmt.Printf("%X ", x)
-				// 			}
-				// 			fmt.Print(" -- ")
-				// 			measure := binary.LittleEndian.Uint16(dataSlice)
-				// 			fmt.Println(measure)
-				// 			readAddr += int64((cgBlock.Data.CycleCount + 16) / 8)
-				// 		}
-				// 	}
-				// 	if cnBlock.Data.DataType != 0 {
-				// 		//Start read signals
-				// 		for i = 0; i <= cgBlock.Data.CycleCount; i += 1 {
-				// 			_, errs := file.Seek(readAddr, 0)
-				// 			if errs != nil {
-				// 				if errs != io.EOF {
-				// 					fmt.Println(errs, "Memory Addr out of size")
-				// 				}
-				// 			}
-				// 			_, err := file.Read(dataSlice)
-				// 			if err != nil {
-				// 				if err != io.EOF {
-				// 					fmt.Println("LoadBuffer error: ", err)
-				// 				}
-				// 			}
-
-				// 			fmt.Print("")
-				// 			for _, x := range dataSlice {
-				// 				fmt.Printf("%X ", x)
-				// 			}
-				// 			fmt.Print("--")
-
-				// 			readAddr += int64((cgBlock.Data.CycleCount + 16) / 8)
-				// 		}
-				// 	}
-
-				// }
-
-				// //End read signals
-
 				nextAddressCN = cnBlock.Link.Next
 				indexCN++
 
@@ -219,11 +154,11 @@ func (m *MF4) read(getXML bool) {
 			NextAddressCG = cgBlock.Link.Next
 			indexCG++
 		}
-
+		
 		NextAddressDG = dgBlock.Link.Next
 		index++
 	}
-
+	
 }
 
 // ChannelNames returns the sample data from a signal
@@ -235,6 +170,44 @@ func (m *MF4) ChannelNames() []string {
 	return channelNames
 }
 
+func (m *MF4) GetChannelSample(channelName string) {
+	cn := m.Channels[channelName]
+	dg := cn.DataGroup
+	cg := cn.ChannelGroup
+	file := m.File
+
+	var i uint64
+	
+	readAddr := blocks.HeaderSize + dg.Link.Data + int64(dg.Data.RecIDSize) + int64(cn.Block.Data.ByteOffset)
+
+	size := (cn.Block.Data.BitCount + uint32(cn.Block.Data.BitOffset)) / 8
+	dataSlice := make([]byte, size)
+
+	//Start read signals
+	for i = 0; i <= cg.Data.CycleCount; i += 1 {
+		_, errs := file.Seek(readAddr, 0)
+		if errs != nil {
+			if errs != io.EOF {
+				fmt.Println(errs, "Memory Addr out of size")
+			}
+		}
+		_, err := file.Read(dataSlice)
+		if err != nil {
+			if err != io.EOF {
+				fmt.Println("LoadBuffer error: ", err)
+			}
+		}
+		fmt.Print("")
+		for _, x := range dataSlice {
+			fmt.Printf("%X", x)
+		}
+		fmt.Print("-")
+		
+		readAddr += int64((cg.Data.CycleCount + 16) / 8)
+	}
+
+	//End read signals
+}
 
 // loadAttachmemt iterates over all AT blocks and append array to MF4 object
 func (m *MF4) loadAttachmemt(file *os.File, startAddressAT int64) {
