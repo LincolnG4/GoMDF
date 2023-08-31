@@ -153,7 +153,6 @@ func (m *MF4) read(getXML bool) {
 		
 		fmt.Println("\n##############################")
 
-
 		NextAddressDG = dgBlock.Link.Next
 		index++
 	}

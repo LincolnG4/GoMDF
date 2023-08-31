@@ -1,11 +1,5 @@
 package blocks
 
-import (
-	"encoding/binary"
-	"fmt"
-	"os"
-)
-
 type EV struct {
 	Header          Header
 	EVNext          int64
@@ -28,21 +22,22 @@ type EV struct {
 	SyncFactor      float32
 }
 
-func (b *EV) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
-	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
+//func (b *EV) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
-	if string(b.Header.ID[:]) != EvID {
-		fmt.Printf("ERROR NOT %s", EvID)
-	}
+// 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
+// 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
-		b.BlankBlock()
-	}
+// 	if string(b.Header.ID[:]) != EvID {
+// 		fmt.Printf("ERROR NOT %s", EvID)
+// 	}
 
-}
+// 	if BinaryError != nil {
+// 		fmt.Println("ERROR", BinaryError)
+// 		b.BlankBlock()
+// 	}
+
+//}
 
 func (b *EV) BlankBlock() EV {
 	return EV{
