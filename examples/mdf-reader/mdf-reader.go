@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	file, err := os.Open("../../samples/sample3.mf4")
+	file, err := os.Open("./samples/sample3.mf4")
 
 	if err != nil {
 		if err != io.EOF {
@@ -20,9 +20,19 @@ func main() {
 	}
 	defer file.Close()
 	
-	mf4 := mf4.ReadFile(file,true)
-	version := mf4.Version()
+	m, err := mf4.ReadFile(file,true)
+	if err != nil{
+		fmt.Println(err)
+	}
+	version := m.Version()
 	fmt.Print(version)
 
+<<<<<<< HEAD
+=======
+	//Return []string with channels name e.g [time,EngSpeed, ...]
+	channels := m.ChannelNames()
+	fmt.Println(channels)
+
+>>>>>>> main
 }
 

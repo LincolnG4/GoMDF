@@ -2,6 +2,7 @@ package blocks
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -16,10 +17,18 @@ type Header struct {
 	LinkCount uint64
 }
 
+<<<<<<< HEAD
 type Group struct {
 	DataGroup    *DG
 	ChannelGroup []*CG
 	Channels     *map[string]*CN
+=======
+type LinkType map[string]int64
+
+func NewBuffer(file *os.File, startAdress int64, BLOCK_SIZE int) *bytes.Buffer {
+	bytesValue := seekBinaryByAddress(file, startAdress, BLOCK_SIZE)
+	return bytes.NewBuffer(bytesValue)
+>>>>>>> main
 }
 
 func NewBuffer(file *os.File, startAdress Link, BLOCK_SIZE int) *bytes.Buffer {
@@ -46,7 +55,11 @@ func seekBinaryByAddress(file *os.File, address Link, block_size int) []byte {
 	return buf
 }
 
+<<<<<<< HEAD
 func getText(file *os.File, startAdress Link, bufSize []byte, decode bool) []byte {
+=======
+func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) []byte {
+>>>>>>> main
 	if startAdress == 0 {
 		return []byte{}
 	}
@@ -67,4 +80,42 @@ func getText(file *os.File, startAdress Link, bufSize []byte, decode bool) []byt
 		return bufSize
 	}
 	return []byte{}
+}
+
+func CalculateLinkSize(linkCount uint64) uint64 {
+	return linkCount * uint64(LinkSize)
+}
+
+func CalculateDataSize(length uint64, linkCount uint64) uint64 {
+	return (length - uint64(HeaderSize) - linkCount*uint64(LinkSize))
+}
+
+// Create a buffer based on blocksize
+func LoadBuffer(file *os.File, blockSize uint64) *bytes.Buffer {
+	buf := make([]byte, blockSize)
+
+	_, err := file.Read(buf)
+	if err != nil {
+		if err != io.EOF {
+			fmt.Println("LoadBuffer error: ", err)
+		}
+	}
+
+	return bytes.NewBuffer(buf)
+}
+
+func ReadInt64FromBinary(file *os.File) int64 {
+	var value int64
+	if err := binary.Read(file, binary.LittleEndian, &value); err != nil {
+		fmt.Println("Error reading binary data:", err)
+	}
+	return value
+}
+
+func ReadAllFromBinary(file *os.File) int64 {
+	var value int64
+	if err := binary.Read(file, binary.LittleEndian, &value); err != nil {
+		fmt.Println("Error reading binary data:", err)
+	}
+	return value
 }

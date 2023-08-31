@@ -6,10 +6,9 @@ Package based on <https://github.com/danielhrisca/asammdf>
 
 ## **Targets / Tasks**:
 - [ ] Read MF4 Files
-- [ ] Read any version of MDF file  
+- [ ] Write MF4 Files
 - [ ] Optimize  
-- [ ] Write MF4 Files  
-- [ ] Write any version of MDF file  
+- [ ] Read/Write any version of MDF file  
 - [ ] Optimize  
 
 ## Getting Started
@@ -41,18 +40,24 @@ func main() {
  file, err := os.Open("../../samples/sample3.mf4")
 
  if err != nil {
-  if err != io.EOF {
-   fmt.Println("Could not open the file")
-   panic(err)
-  }
-
+    if err != io.EOF {
+        fmt.Println("Could not open the file")
+        panic(err)
+    }
  }
 
  defer file.Close()
  
- mf4 := mf4.ReadFile(file,true)
- version := mf4.Version()
+ m, err := mf4.ReadFile(file,true)
+ if err != nil{
+  fmt.Println(err)
+ }
+ version := m.Version()
  fmt.Print(version)
+
+ //Return []string with channels name e.g [time,EngSpeed, ...]
+ channels := m.ChannelNames()
+ fmt.Println(channels)
 }
 
 ```
