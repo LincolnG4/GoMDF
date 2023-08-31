@@ -2,6 +2,7 @@ package mf4
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -58,13 +59,8 @@ func ReadFile(file *os.File, getXML bool) (*MF4, error) {
 		return nil, &VersionError{}
 	}
 
-	if fileVersion >= 410 {
+	if fileVersion >= 400 {
 		mf4File.read(getXML)
-	}
-
-	if fileVersion >= 420 {
-		fmt.Print("ADDING COLUMN STORE")
-		//ADD COLUMN STORAGE
 	}
 
 	return &mf4File, nil
@@ -127,10 +123,10 @@ func (m *MF4) read(getXML bool) {
 					DataGroup:    dgBlock,
 					ChannelGroup: cgBlock,
 				}
-				
+
 				txBlock := TX.New(file, int64(cnBlock.Link.TxName))
-				
-				channelName :=string(bytes.Trim(txBlock.Data.TxData,"\x00"))
+
+				channelName := string(bytes.Trim(txBlock.Data.TxData, "\x00"))
 				m.Channels[channelName] = channel
 
 				//Get XML comments
@@ -154,11 +150,11 @@ func (m *MF4) read(getXML bool) {
 			NextAddressCG = cgBlock.Link.Next
 			indexCG++
 		}
-		
+
 		NextAddressDG = dgBlock.Link.Next
 		index++
 	}
-	
+
 }
 
 // ChannelNames returns the sample data from a signal
@@ -176,37 +172,283 @@ func (m *MF4) GetChannelSample(channelName string) {
 	cg := cn.ChannelGroup
 	file := m.File
 
-	var i uint64
-	
+	//cnType := cn.Block.Data.Type
+	//cnSyncType := cn.Block.Data.SyncType
+	dataType := cn.Block.Data.DataType
+
 	readAddr := blocks.HeaderSize + dg.Link.Data + int64(dg.Data.RecIDSize) + int64(cn.Block.Data.ByteOffset)
-
 	size := (cn.Block.Data.BitCount + uint32(cn.Block.Data.BitOffset)) / 8
-	dataSlice := make([]byte, size)
+	data := make([]byte, size)
 
-	//Start read signals
-	for i = 0; i <= cg.Data.CycleCount; i += 1 {
-		_, errs := file.Seek(readAddr, 0)
-		if errs != nil {
-			if errs != io.EOF {
-				fmt.Println(errs, "Memory Addr out of size")
-			}
-		}
-		_, err := file.Read(dataSlice)
-		if err != nil {
-			if err != io.EOF {
-				fmt.Println("LoadBuffer error: ", err)
-			}
-		}
-		fmt.Print("")
-		for _, x := range dataSlice {
-			fmt.Printf("%X", x)
-		}
-		fmt.Print("-")
+	rowSize := int64(cg.Data.DataBytes)
+
+	var byteOrder binary.ByteOrder
+
+	if dataType == 0 || dataType == 2 || dataType == 4 || dataType == 8 || dataType == 15 {
+		byteOrder = binary.LittleEndian
+	} else {
+		byteOrder = binary.BigEndian
+	}
+	dtype:=loadDataType(dataType, len(data))
+	fmt.Println(channelName)
+	switch dtype.(type) {
+	case uint8:
+		var i uint64
+		var value uint8
 		
-		readAddr += int64((cg.Data.CycleCount + 16) / 8)
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+
+			readAddr += rowSize
+		}
+	case uint16:
+		var value uint16
+		var i uint64
+		
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+
+			readAddr += rowSize
+		}
+	case uint32:
+		var value uint32
+		var i uint64
+		
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+		
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+
+			readAddr += rowSize
+		}
+	case uint64:
+		var value uint64
+		var i uint64
+		
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+
+			readAddr += rowSize
+		}
+	case int8:
+		var value int8
+		var i uint64
+		
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+
+			readAddr += rowSize
+		}
+	case int16:
+		var value int16
+		var i uint64
+		
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+
+			readAddr += rowSize
+		}
+	case int32:
+		var value int32
+		var i uint64
+		
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+			readAddr += rowSize
+		}
+	case int64:
+		var value int64
+		var i uint64
+		
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+
+			readAddr += rowSize
+		}
+	case float32:
+		var value float32
+		var i uint64
+		
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+
+			readAddr += rowSize
+		}
+	case float64:
+		var value float64
+		var i uint64
+		
+		for i = 0; i < cg.Data.CycleCount; i += 1 {
+			seekRead(file, readAddr, data)
+
+			buf := bytes.NewBuffer(data)
+			err := binary.Read(buf, byteOrder, &value)
+			if err != nil {
+				fmt.Println("Error reading uint32:", err)
+				return
+			}
+			fmt.Print("--Value:", value,"--")
+
+			readAddr += rowSize
+		}
+						
 	}
 
-	//End read signals
+	// switch cnType {
+	// case 0:
+
+	// case 1:
+	// 	fmt.Print("1")
+	// case 2:
+	// 	switch cnSyncType {
+	// 	case 0:
+	// 		fmt.Println("Normal")
+	// 	case 1:
+	// 		fmt.Println("Time")
+	// 	case 2:
+	// 		fmt.Println("Angle")
+	// 	case 3:
+	// 		fmt.Println("Distance")
+	// 	case 4:
+	// 		fmt.Println("Index")
+	// 	}
+	// case 3:
+	// 	fmt.Print("Virtual Master channel")
+	// case 4:
+	// 	fmt.Print("Virtual Master channel")
+	// case 5:
+	// 	fmt.Print("Virtual Master channel")
+	// case 6:
+	// 	fmt.Print("Virtual Master channel")
+	// }
+
+}
+
+func seekRead(file *os.File, readAddr int64, data []byte) {
+	_, errs := file.Seek(readAddr, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "Memory Addr out of size")
+		}
+	}
+	_, err := file.Read(data)
+	if err != nil {
+		if err != io.EOF {
+			fmt.Println("LoadBuffer error: ", err)
+		}
+	}
+
+}
+
+func loadDataType(dataType uint8, lenSize int) interface{} {
+	var dtype interface{}
+	switch dataType {
+	case 0, 1:
+		switch lenSize {
+		case 1:
+			dtype = uint8(0)
+		case 2:
+			dtype = uint16(0)
+		case 4:
+			dtype = uint32(0)
+		case 8:
+			dtype = uint64(0)
+		}
+	case 2, 3:
+		switch lenSize {
+		case 1:
+			dtype = int8(0)
+		case 2:
+			dtype = int16(0)
+		case 4:
+			dtype = int32(0)
+		case 8:
+			dtype = int64(0)
+		}
+
+	case 4, 5:
+		switch lenSize {
+		case 4:
+			dtype = float32(0)
+		case 8:
+			dtype = float64(0)
+
+		}
+
+	}
+
+	return dtype
 }
 
 // loadAttachmemt iterates over all AT blocks and append array to MF4 object

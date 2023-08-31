@@ -30,7 +30,7 @@ type Data struct {
 	CycleCount    uint64
 	Flags         uint16
 	PathSeparator uint16 // Version 4.1
-	Reserved      uint8
+	Reserved      [4]byte
 	DataBytes     uint32
 	InvalBytes    uint32
 }
