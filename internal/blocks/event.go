@@ -1,22 +1,7 @@
 package blocks
 
-import (
-	"encoding/binary"
-	"fmt"
-	"os"
-)
-
 type EV struct {
 	Header          Header
-<<<<<<< HEAD
-	Next            Link
-	EVParent        Link
-	EVRange         Link
-	TXName          Link
-	MDComment       Link
-	Scope           Link
-	ATReference     Link
-=======
 	EVNext          int64
 	EVParent        int64
 	EVRange         int64
@@ -24,7 +9,6 @@ type EV struct {
 	MDComment       int64
 	Scope           int64
 	ATReference     [4]byte
->>>>>>> main
 	Type            uint8
 	SyncType        uint8
 	RangeType       uint8
@@ -38,25 +22,21 @@ type EV struct {
 	SyncFactor      float32
 }
 
-<<<<<<< HEAD
-func (b *EV) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
-=======
-func (b *EV) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
->>>>>>> main
+// func (b *EV) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
-	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
+// 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
+// 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
 
-	if string(b.Header.ID[:]) != EvID {
-		fmt.Printf("ERROR NOT %s", EvID)
-	}
+// 	if string(b.Header.ID[:]) != EvID {
+// 		fmt.Printf("ERROR NOT %s", EvID)
+// 	}
 
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
-		b.BlankBlock()
-	}
+// 	if BinaryError != nil {
+// 		fmt.Println("ERROR", BinaryError)
+// 		b.BlankBlock()
+// 	}
 
-}
+// }
 
 func (b *EV) BlankBlock() EV {
 	return EV{
