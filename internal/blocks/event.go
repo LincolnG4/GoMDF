@@ -8,6 +8,15 @@ import (
 
 type EV struct {
 	Header          Header
+<<<<<<< HEAD
+	Next            Link
+	EVParent        Link
+	EVRange         Link
+	TXName          Link
+	MDComment       Link
+	Scope           Link
+	ATReference     Link
+=======
 	EVNext          int64
 	EVParent        int64
 	EVRange         int64
@@ -15,6 +24,7 @@ type EV struct {
 	MDComment       int64
 	Scope           int64
 	ATReference     [4]byte
+>>>>>>> main
 	Type            uint8
 	SyncType        uint8
 	RangeType       uint8
@@ -28,7 +38,11 @@ type EV struct {
 	SyncFactor      float32
 }
 
+<<<<<<< HEAD
+func (b *EV) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
+=======
 func (b *EV) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
+>>>>>>> main
 
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
