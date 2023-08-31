@@ -17,26 +17,14 @@ type Header struct {
 	LinkCount uint64
 }
 
-<<<<<<< HEAD
-type Group struct {
-	DataGroup    *DG
-	ChannelGroup []*CG
-	Channels     *map[string]*CN
-=======
 type LinkType map[string]int64
 
 func NewBuffer(file *os.File, startAdress int64, BLOCK_SIZE int) *bytes.Buffer {
 	bytesValue := seekBinaryByAddress(file, startAdress, BLOCK_SIZE)
 	return bytes.NewBuffer(bytesValue)
->>>>>>> main
 }
 
-func NewBuffer(file *os.File, startAdress Link, BLOCK_SIZE int) *bytes.Buffer {
-	bytesValue := seekBinaryByAddress(file, startAdress, BLOCK_SIZE)
-	return bytes.NewBuffer(bytesValue)
-}
-
-func seekBinaryByAddress(file *os.File, address Link, block_size int) []byte {
+func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	buf := make([]byte, block_size)
 	_, errs := file.Seek(int64(address), 0)
 	if errs != nil {
@@ -55,11 +43,7 @@ func seekBinaryByAddress(file *os.File, address Link, block_size int) []byte {
 	return buf
 }
 
-<<<<<<< HEAD
-func getText(file *os.File, startAdress Link, bufSize []byte, decode bool) []byte {
-=======
 func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) []byte {
->>>>>>> main
 	if startAdress == 0 {
 		return []byte{}
 	}

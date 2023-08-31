@@ -27,7 +27,7 @@ type CA struct {
 	CycleCount        uint64
 }
 
-func (b *CA) New(file *os.File, startAdress Link, BLOCK_SIZE int) {
+func (b *CA) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	b.Header = &Header{}
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)

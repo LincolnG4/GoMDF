@@ -10,11 +10,8 @@ const (
 	MdID = "##MD"
 	FhID = "##FH"
 	DtID = "##DT"
-<<<<<<< HEAD
-	CaID = "##CA"
-=======
 	HdID = "##HD"
->>>>>>> main
+	CaID = "##CA"
 )
 
 const (
