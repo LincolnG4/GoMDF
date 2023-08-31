@@ -23,6 +23,7 @@ func NewBuffer(file *os.File, startAdress int64, BLOCK_SIZE int) *bytes.Buffer {
 	bytesValue := seekBinaryByAddress(file, startAdress, BLOCK_SIZE)
 	return bytes.NewBuffer(bytesValue)
 }
+
 func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	buf := make([]byte, block_size)
 	_, errs := file.Seek(int64(address), 0)
@@ -41,6 +42,7 @@ func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	}
 	return buf
 }
+
 func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) []byte {
 	if startAdress == 0 {
 		return []byte{}

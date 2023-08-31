@@ -22,7 +22,8 @@ type EV struct {
 	SyncFactor      float32
 }
 
-// func (b *EV) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
+
+//func (b *EV) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
 // 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 // 	BinaryError := binary.Read(buffer, binary.LittleEndian, b)
@@ -36,7 +37,7 @@ type EV struct {
 // 		b.BlankBlock()
 // 	}
 
-// }
+//}
 
 func (b *EV) BlankBlock() EV {
 	return EV{
