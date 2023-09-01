@@ -58,6 +58,11 @@ func main() {
  //Return []string with channels name e.g [time,EngSpeed, ...]
  channels := m.ChannelNames()
  fmt.Println(channels)
+ value,err := m.GetChannelSample("channel1")
+ if err != nil{
+  fmt.Println(err)
+ }
+ fmt.Println(value)
 }
 
 ```
