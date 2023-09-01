@@ -27,12 +27,11 @@ func main() {
 	version := m.Version()
 	fmt.Print(version)
 
-<<<<<<< HEAD
-=======
 	//Return []string with channels name e.g [time,EngSpeed, ...]
 	channels := m.ChannelNames()
 	fmt.Println(channels)
+	
+	
 
->>>>>>> main
 }
 
