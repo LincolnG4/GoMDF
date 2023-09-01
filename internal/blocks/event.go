@@ -22,7 +22,6 @@ type EV struct {
 	SyncFactor      float32
 }
 
-
 //func (b *EV) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 
 // 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
