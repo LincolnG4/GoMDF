@@ -1,11 +1,5 @@
 package blocks
 
-import (
-	"encoding/binary"
-	"fmt"
-	"os"
-)
-
 type CA struct {
 	Header            *Header
 	Composition       Link
@@ -27,24 +21,25 @@ type CA struct {
 	CycleCount        uint64
 }
 
+
 func (b *CA) New(file *os.File, startAdress int64, BLOCK_SIZE int) {
 	b.Header = &Header{}
 	buffer := NewBuffer(file, startAdress, BLOCK_SIZE)
 	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)
 
-	fmt.Println(string(b.Header.ID[:]))
+// 	fmt.Println(string(b.Header.ID[:]))
 
-	if string(b.Header.ID[:]) != CaID {
-		fmt.Printf("ERROR NOT %s ", CaID)
-		panic(BinaryError)
-	}
+// 	if string(b.Header.ID[:]) != CaID {
+// 		fmt.Printf("ERROR NOT %s ", CaID)
+// 		panic(BinaryError)
+// 	}
 
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+// 	if BinaryError != nil {
+// 		fmt.Println("ERROR", BinaryError)
 
-	}
+// 	}
 
-}
+// }
 
 func (b *CA) BlankBlock() CA {
 	return CA{
