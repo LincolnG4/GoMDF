@@ -111,11 +111,11 @@ func (m *MF4) read(getXML bool) {
 		for NextAddressCG != 0 {
 			cgBlock := CG.New(file, version, NextAddressCG)
 			//Save Informations
-			channelGroup:=&ChannelGroup{
-				Block: cgBlock,
-				Channels: make(map[string]*CN.Block),
+			channelGroup := &ChannelGroup{
+				Block:     cgBlock,
+				Channels:  make(map[string]*CN.Block),
 				Datagroup: dgBlock,
-			} 
+			}
 
 			//From CGBLOCK read Channel
 			nextAddressCN := cgBlock.Link.CnFirst
@@ -126,7 +126,7 @@ func (m *MF4) read(getXML bool) {
 
 				//Get Name
 				txBlock := TX.New(file, int64(cnBlock.Link.TxName))
-					
+
 				//Remove 00 bytes from the name
 				channelName := string(bytes.Trim(txBlock.Data.TxData, "\x00"))
 				channelGroup.Channels[channelName] = cnBlock
@@ -142,13 +142,12 @@ func (m *MF4) read(getXML bool) {
 					fmt.Print(mdComment, mdBlock, "\n")
 				}
 
-				
 				nextAddressCN = cnBlock.Link.Next
 				indexCN++
 
 			}
 
-			m.ChannelGroup = append(m.ChannelGroup, channelGroup)	
+			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
 			NextAddressCG = cgBlock.Link.Next
 			indexCG++
 		}
@@ -165,8 +164,8 @@ func (m *MF4) read(getXML bool) {
 func (m *MF4) ChannelNames() []string {
 	channelNames := make([]string, 0)
 
-	for _,cg := range m.ChannelGroup {
-		for key := range cg.Channels{
+	for _, cg := range m.ChannelGroup {
+		for key := range cg.Channels {
 			channelNames = append(channelNames, key)
 		}
 	}
@@ -174,8 +173,8 @@ func (m *MF4) ChannelNames() []string {
 	return channelNames
 }
 
-//GetChannelSample load sample by Channel Name 
-func (m *MF4) GetChannelSample(channelName string) ([]interface{},error) {
+// GetChannelSample load sample by Channel Name
+func (m *MF4) GetChannelSample(channelName string) ([]interface{}, error) {
 	var byteOrder binary.ByteOrder
 
 	for _, cgrp := range m.ChannelGroup {
@@ -215,7 +214,7 @@ func (m *MF4) GetChannelSample(channelName string) ([]interface{},error) {
 			err := binary.Read(buf, byteOrder, sliceElem)
 			if err != nil {
 				fmt.Println("Error reading:", err)
-				return nil,  errors.New("parsing channel error")
+				return nil, errors.New("parsing channel error")
 			}
 			sample = append(sample, reflect.ValueOf(sliceElem).Elem().Interface())
 			readAddr += rowSize
