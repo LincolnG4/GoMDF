@@ -203,7 +203,6 @@ func (m *MF4) GetChannelSample(channelName string) ([]interface{},error) {
 		}
 
 		dtype := loadDataType(dataType, len(data))
-		fmt.Println(reflect.TypeOf(dtype))
 
 		// Create a new instance of the data type using reflection
 		sliceElemType := reflect.TypeOf(dtype)
@@ -222,7 +221,6 @@ func (m *MF4) GetChannelSample(channelName string) ([]interface{},error) {
 			readAddr += rowSize
 		}
 
-		fmt.Println(channelName)
 		return sample, nil
 	}
 	return nil, errors.New("channel doen't exist")
