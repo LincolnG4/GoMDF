@@ -3,76 +3,62 @@ package MD
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
+	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
 )
 
-type Data struct {
-	Value []byte
-}
-
 type Block struct {
-	Header *blocks.Header
-	Data   *Data
+	Header blocks.Header
+	Data   []byte
 }
 
-func (b *Block) New(file *os.File, startAdress int64) {
+func New(file *os.File, startAdress int64) *string {
 
-	//Read Header Section
-	b.Header = &blocks.Header{}
-	buffer := blocks.NewBuffer(file, startAdress, blocks.HeaderSize)
-	BinaryError := binary.Read(buffer, binary.LittleEndian, b.Header)
+	var blockSize uint64 = blocks.HeaderSize
+	var b Block
 
-	blockID := string(b.Header.ID[:])
-	if blockID != blocks.MdID && blockID != blocks.TxID {
-		fmt.Printf("ERROR NOT %s\n", blocks.MdID)
+	_, errs := file.Seek(startAdress, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "Memory Addr out of size")
+		}
 	}
 
+	b.Header = blocks.Header{}
+
+	//Create a buffer based on blocksize
+	buf := blocks.LoadBuffer(file, blockSize)
+
+	//Read header
+	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
 	}
 
 	//If block is ##MD
-	if blockID == blocks.MdID {
-		b.Data = &Data{}
-		buf := make([]byte, int64(b.Header.Length-blocks.HeaderSize))
-
-		b.Data.Value = blocks.GetText(file, startAdress, buf, true)
-
-	} else { //If block is ##TX
-		b.Data = &Data{}
-		buf := make([]byte, int64(b.Header.Length-blocks.HeaderSize))
-
-		b.Data.Value = blocks.GetText(file, startAdress, buf, true)
-
+	if string(b.Header.ID[:]) == blocks.MdID {
+		blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+		buf := make([]byte, blockSize)
+		b.Data = *blocks.GetText(file, startAdress, buf, true)
+		r := string(b.Data)
+		return &r
 	}
 
-	fmt.Printf("\n%s\n", b.Header.ID)
-	fmt.Printf("%+v\n", b.Header)
-	fmt.Printf("%s\n", b.Data)
-
+	return TX.GetText(file, startAdress)
 }
 
-func (b *Block) BlankBlock() Block {
-	return Block{
-		&blocks.Header{
+func (b *Block) BlankBlock() *Block {
+	return &Block{
+		Header: blocks.Header{
 			ID:        [4]byte{'#', '#', 'M', 'D'},
 			Reserved:  [4]byte{},
 			Length:    64,
 			LinkCount: 4,
 		},
-		&Data{},
+		Data: []byte{},
 	}
-}
-
-func ReadMdComment(file *os.File, startAdress int64) *Block {
-	mdBlock := Block{}
-	mdBlock.New(file, startAdress)
-
-	fmt.Printf("\n%+s\n", mdBlock.Header.ID)
-	fmt.Printf("%+v\n", mdBlock.Header)
-
-	return &mdBlock
 }

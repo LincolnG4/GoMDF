@@ -12,6 +12,7 @@ const (
 	DtID = "##DT"
 	HdID = "##HD"
 	CaID = "##CA"
+	CcID = "##CC"
 )
 
 const (
