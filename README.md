@@ -38,7 +38,7 @@ import (
 )
 
 func main() {
- file, err := os.Open("/home/lincolng/Downloads/MDF/BaseStandard/Examples/Attachments/EmbeddedCompressed/Vector_EmbeddedCompressed.MF4")
+ file, err := os.Open("sample.MF4")
 
  if err != nil {
   if err != io.EOF {
@@ -71,7 +71,7 @@ func main() {
  //Extract embedded and compressed files from MF4 
  fa := []app.AttFile{}
  for _, value := range m.Attachments {
-  fa= append(fa,value.ExtractAttachment(file, "/home/lincolng/Downloads/"))
+  fa= append(fa,value.ExtractAttachment(file, "/home/"))
  }
  fmt.Println(fa)
 }
