@@ -41,8 +41,6 @@ type Data struct {
 	EmbeddedData []byte   //Contains binary embedded data
 }
 
-
-
 const blockID string = blocks.AtID
 
 func New(file *os.File, startAdress int64) *Block {
@@ -105,7 +103,6 @@ func (b *Block) BlankBlock() *Block {
 	}
 }
 
-
 func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile {
 	var comment string
 
@@ -155,7 +152,7 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 	//Embbeded file - Compressed Zip
 	if blocks.IsBitSet(flag, 1) {
 		fmt.Println("### COMPRESSED")
-		
+
 		c := bytes.NewReader(d.EmbeddedData)
 
 		r, err := zlib.NewReader(c)
