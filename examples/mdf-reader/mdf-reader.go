@@ -34,16 +34,21 @@ func main() {
 	channels := m.ChannelNames()
 	fmt.Println(channels)
 
-	value, err := m.GetChannelSample(0,channels[0][0])
-	if err != nil {
-	fmt.Println(err)
+	for dg,cn := range m.ChannelNames(){
+		for _,ch := range cn {
+			value, err := m.GetChannelSample(dg, ch)
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Printf("\nChannel %s ==> Value %v",ch,value)
+		}
 	}
-	fmt.Println(value)
 	
-	//Extract embedded and compressed files from MF4 
+
+	//Extract embedded and compressed files from MF4
 	fa := []app.AttFile{}
 	for _, value := range m.Attachments {
-		fa= append(fa,value.ExtractAttachment(file, "/home/"))
+		fa = append(fa, value.ExtractAttachment(file, "/home/lincolng/Downloads/"))
 	}
 	fmt.Println(fa)
 }

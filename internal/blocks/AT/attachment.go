@@ -3,6 +3,7 @@ package AT
 import (
 	"bytes"
 	"compress/zlib"
+	"crypto/md5"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -116,6 +117,7 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 	filename := filepath.Base(f)
 	filetype := *TX.GetText(file, b.Link.TxMimetype)
 
+	ci := string(d.CreatorIndex)
 	//If file has no extension, try to save it by mime
 	if filepath.Ext(filename) == "" {
 		ext, err := mime.ExtensionsByType(filetype)
@@ -145,6 +147,7 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 			Type:    filetype,
 			Comment: comment,
 			Path:    f,
+			CreatorIndex:ci,
 		}
 	}
 	fmt.Println("### Embbeded")
@@ -167,8 +170,9 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 
 	//Embbeded file - MD5 check sum
 	if blocks.IsBitSet(flag, 2) {
-		fmt.Println("MD5")
-
+		if md5.Sum(data) != d.MD5Checksum{
+			fmt.Println("Checksums do not match. The file may be corrupted. File:", filename)	
+		}
 	}
 
 	saveFile(file, p, &data)
@@ -178,6 +182,7 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 		Type:    filetype,
 		Comment: comment,
 		Path:    p,
+		CreatorIndex:ci,
 	}
 }
 
