@@ -16,12 +16,12 @@ type Block struct {
 }
 
 type Link struct {
-	Next        int64
-	CnFirst     int64
-	TxAcqName   int64
-	SiAcqSource int64
-	SrFirst     int64
-	MdComment   int64
+	Next        int64 //Pointer to next channel group block (CGBLOCK)
+	CnFirst     int64 //Pointer to first channel block (CNBLOCK)
+	TxAcqName   int64 //Pointer to acquisition name (TXBLOCK)
+	SiAcqSource int64 //Pointer to acquisition source (SIBLOCK)
+	SrFirst     int64 //Pointer to first sample reduction block (SRBLOCK)
+	MdComment   int64 //Pointer to comment and additional information (TXBLOCK or MDBLOCK)
 	CgMaster    int64 // Version 4.2
 }
 

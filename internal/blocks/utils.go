@@ -43,13 +43,13 @@ func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	return buf
 }
 
-func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) []byte {
+func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) *[]byte {
 	if startAdress == 0 {
-		return []byte{}
+		return &[]byte{}
 	}
 
 	if decode {
-		_, err := file.Seek(int64(startAdress)+24, io.SeekStart)
+		_, err := file.Seek(int64(startAdress)+HeaderSize, io.SeekStart)
 		if err != nil {
 			panic(err)
 		}
@@ -61,9 +61,9 @@ func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) []by
 				panic(err)
 			}
 		}
-		return bufSize
+		return &bufSize
 	}
-	return []byte{}
+	return &[]byte{}
 }
 
 func CalculateLinkSize(linkCount uint64) uint64 {
@@ -102,4 +102,12 @@ func ReadAllFromBinary(file *os.File) int64 {
 		fmt.Println("Error reading binary data:", err)
 	}
 	return value
+}
+
+func IsBitSet(value int, bitPosition int) bool {
+	// Create a bitmask with the target bit set (1) and all other bits unset (0)
+	bitmask := 1 << (bitPosition) // 2
+
+	// Use bitwise AND to check if the target bit is set
+	return (value & bitmask) != 0 // 5 & 2 != 0  false
 }

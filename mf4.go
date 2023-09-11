@@ -72,7 +72,7 @@ func (m *MF4) read(getXML bool) {
 	var file *os.File = m.File
 
 	if m.Identification.UnfinalizedFlag != 0 {
-		panic("NOT FINALIZED, CODE NOTE PREPARE FOR IT")
+		panic("NOT FINALIZED MF4, PACKAGE IS NOT PREPARED")
 	}
 
 	//Create MF4 struct from the file
@@ -99,8 +99,7 @@ func (m *MF4) read(getXML bool) {
 		//Read MdBlocks inside
 		mdCommentAddr := dgBlock.Link.MdComment
 		if mdCommentAddr != 0 {
-			mdBlock := MD.ReadMdComment(file, mdCommentAddr)
-			comment := mdBlock.Data.Value
+			comment := *MD.New(file, mdCommentAddr)
 			fmt.Printf("%s\n", comment)
 		}
 
@@ -125,17 +124,16 @@ func (m *MF4) read(getXML bool) {
 				cnBlock := CN.New(file, version, nextAddressCN)
 
 				//Get Name
-				txBlock := TX.New(file, int64(cnBlock.Link.TxName))
+				channelName := *TX.GetText(file, int64(cnBlock.Link.TxName))
 
 				//Remove 00 bytes from the name
-				channelName := string(bytes.Trim(txBlock.Data.TxData, "\x00"))
 				channelGroup.Channels[channelName] = cnBlock
 
 				//Get XML comments
 				MdCommentAdress := cnBlock.Link.MdComment
 				if getXML && MdCommentAdress != 0 {
-					mdBlock := MD.Block{}
-					mdBlock.New(file, MdCommentAdress)
+					comment := MD.New(file, MdCommentAdress)
+					fmt.Println(comment)
 				} else {
 					mdBlock := (&MD.Block{}).BlankBlock()
 					mdComment := ""
@@ -160,31 +158,54 @@ func (m *MF4) read(getXML bool) {
 
 }
 
-// ChannelNames returns the sample data from a signal
-func (m *MF4) ChannelNames() []string {
-	channelNames := make([]string, 0)
+/*
+ChannelNames returns a map of channels of each datagroup
 
-	for _, cg := range m.ChannelGroup {
-		for key := range cg.Channels {
-			channelNames = append(channelNames, key)
+	map[key]value
+	key = Datagroup number
+	value = array with channel names
+*/
+func (m *MF4) ChannelNames() map[int][]string {
+	channelMap := make(map[int][]string, 0)
+
+	for i, cg := range m.ChannelGroup {
+		channelNames := make([]string, 0)
+		for name := range cg.Channels {
+			channelNames = append(channelNames, name)
 		}
+		channelMap[i] = channelNames
 	}
 
-	return channelNames
+	return channelMap
 }
 
-// GetChannelSample load sample by Channel Name
-func (m *MF4) GetChannelSample(channelName string) ([]interface{}, error) {
+// GetChannelSample loads sample by DataGroup and ChannelName
+func (m *MF4) GetChannelSample(datagroup int, channelName string) ([]interface{}, error) {
 	var byteOrder binary.ByteOrder
+	file := m.File
 
-	for _, cgrp := range m.ChannelGroup {
+	//for each Channel Group, read channel
+	for i, cgrp := range m.ChannelGroup {
+		if i != datagroup {
+			continue
+		}
 		cn, ok := cgrp.Channels[channelName]
 		if !ok {
 			continue
 		}
 		dg := cgrp.Datagroup
 		cg := cgrp.Block
-		file := m.File
+
+		//Get channel with compositon Structure or Array
+		comp := cn.Link.Composition
+		if comp != 0 {
+			id := make([]byte, 4)
+			seekRead(file, comp, id)
+
+			if string(id) == blocks.CaID {
+				readArrayBlock(file, comp)
+			}
+		}
 
 		dataType := cn.Data.DataType
 
@@ -224,6 +245,11 @@ func (m *MF4) GetChannelSample(channelName string) ([]interface{}, error) {
 	}
 	return nil, errors.New("channel doen't exist")
 }
+
+func readArrayBlock(file *os.File, addr int64) {
+	//debug(file,addr,400)
+}
+
 func seekRead(file *os.File, readAddr int64, data []byte) {
 	_, errs := file.Seek(readAddr, 0)
 	if errs != nil {
@@ -289,20 +315,17 @@ func (m *MF4) loadAttachmemt(file *os.File, startAddressAT int64) {
 	for nextAddressAT != 0 {
 		atBlock := AT.New(file, nextAddressAT)
 
-		txBlock := TX.New(file, atBlock.Link.TXFilename)
-		filename := txBlock.Data.TxData
-		fmt.Printf("Filename attached: %s\n", filename)
+		fileName := TX.GetText(file, atBlock.Link.TxFilename)
+		fmt.Printf("Filename attached: %s\n", *fileName)
 
-		txBlock = TX.New(file, atBlock.Link.TXMimetype)
-		mime := txBlock.Data.TxData
-		fmt.Printf("Mime attached: %s\n", mime)
+		mimeType := TX.GetText(file, atBlock.Link.TxMimetype)
+		fmt.Printf("Mime attached: %s\n", *mimeType)
 
 		//Read MDComment
 		MdCommentAdress := atBlock.Link.MDComment
 		if MdCommentAdress != 0 {
-			mdBlock := MD.ReadMdComment(file, MdCommentAdress)
-			comment := mdBlock.Data.Value
-			fmt.Printf("%s\n", comment)
+			comment := MD.New(file, MdCommentAdress)
+			fmt.Printf("%s\n", *comment)
 		}
 
 		array = append(array, atBlock)
@@ -310,7 +333,6 @@ func (m *MF4) loadAttachmemt(file *os.File, startAddressAT int64) {
 		index++
 	}
 	m.Attachments = array
-
 }
 
 // LoadFileHistory iterates over all FH blocks and append array to MF4 object
@@ -326,8 +348,8 @@ func (m *MF4) loadFileHistory(file *os.File, startAddressFH int64, getXML bool) 
 
 		//Read MDComment
 		if MdCommentAdress != 0 {
-			comment := MD.ReadMdComment(file, MdCommentAdress)
-			fmt.Printf("%s\n", comment.Data)
+			comment := *MD.New(file, MdCommentAdress)
+			fmt.Printf("%s\n", comment)
 		}
 
 		array = append(array, fhBlock)

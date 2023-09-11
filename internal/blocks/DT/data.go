@@ -14,8 +14,6 @@ type Block struct {
 	Data   []byte
 }
 
-const blockID string = blocks.DtID
-
 func New(file *os.File, startAdress int64) *Block {
 	var blockSize uint64 = blocks.HeaderSize
 	var b Block
@@ -37,10 +35,6 @@ func New(file *os.File, startAdress int64) *Block {
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
-	}
-
-	if string(b.Header.ID[:]) != blockID {
-		fmt.Printf("ERROR NOT %s", blockID)
 	}
 
 	return &b

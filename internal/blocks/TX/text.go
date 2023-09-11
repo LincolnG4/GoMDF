@@ -1,6 +1,7 @@
 package TX
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -20,7 +21,7 @@ type Block struct {
 
 const blockID string = blocks.TxID
 
-func New(file *os.File, startAdress int64) *Block {
+func GetText(file *os.File, startAdress int64) *string {
 	var blockSize uint64 = blocks.HeaderSize
 	var b Block
 
@@ -51,9 +52,9 @@ func New(file *os.File, startAdress int64) *Block {
 
 	b.Data = Data{}
 	buff := make([]byte, blockSize)
-
-	b.Data.TxData = blocks.GetText(file, startAdress, buff, true)
-	return &b
+	t := blocks.GetText(file, startAdress, buff, true)
+	result := string(bytes.Trim(*t, "\x00"))
+	return &result
 }
 
 func (b *Block) BlankBlock() *Block {
