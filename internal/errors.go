@@ -1,8 +1,8 @@
-package mf4
+package internal
 
 type VersionError struct {
 }
 
 func (e *VersionError) Error() string {
-	return "File version is not >= 4.00"
+	return "file version is not >= 4.00"
 }

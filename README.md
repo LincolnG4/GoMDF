@@ -76,9 +76,9 @@ func main() {
  //Extract embedded and compressed files from MF4
  fa := []app.AttFile{}
  for _, value := range m.Attachments {
-  fa = append(fa, value.ExtractAttachment(file, "/home/lincolng/Downloads/"))
+  fa = append(fa, value.ExtractAttachment(file, "./home/"))
  }
  fmt.Println(fa)
-
+} 
 
 ```

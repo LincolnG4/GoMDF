@@ -104,6 +104,7 @@ func (b *Block) BlankBlock() *Block {
 	}
 }
 
+//ExtractAttachment 
 func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile {
 	var comment string
 
@@ -117,7 +118,7 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 	filename := filepath.Base(f)
 	filetype := *TX.GetText(file, b.Link.TxMimetype)
 
-	ci := string(d.CreatorIndex)
+	ci := fmt.Sprint(d.CreatorIndex)
 	//If file has no extension, try to save it by mime
 	if filepath.Ext(filename) == "" {
 		ext, err := mime.ExtensionsByType(filetype)
@@ -134,8 +135,8 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 	//Create file output
 	p := filepath.Join(outputPath + filename)
 
+	//External File
 	if !blocks.IsBitSet(flag, 0) {
-		//External File
 		MdCommentAdress := b.Link.MDComment
 		if MdCommentAdress != 0 {
 			comment = string(*MD.New(file, MdCommentAdress))
@@ -155,17 +156,7 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 	//Embbeded file - Compressed Zip
 	if blocks.IsBitSet(flag, 1) {
 		fmt.Println("### COMPRESSED")
-
-		c := bytes.NewReader(d.EmbeddedData)
-
-		r, err := zlib.NewReader(c)
-		if err != nil {
-			fmt.Println(err)
-		}
-		data, err = io.ReadAll(r)
-		if err != nil {
-			fmt.Println(err)
-		}
+		data = decompressFile(d)
 	}
 
 	//Embbeded file - MD5 check sum
@@ -186,6 +177,22 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 	}
 }
 
+//decompressFile uses zlib to decompress databyte
+func decompressFile(d *Data) []byte {
+	c := bytes.NewReader(d.EmbeddedData)
+
+	r, err := zlib.NewReader(c)
+	if err != nil {
+		fmt.Println(err)
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return data
+}
+
+//saveFile saves bytes to target file
 func saveFile(file *os.File, outputPath string, data *[]byte) error {
 	f, err := os.Create(outputPath)
 	if err != nil {

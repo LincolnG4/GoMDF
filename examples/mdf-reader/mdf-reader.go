@@ -34,16 +34,15 @@ func main() {
 	channels := m.ChannelNames()
 	fmt.Println(channels)
 
-	for dg,cn := range m.ChannelNames(){
-		for _,ch := range cn {
+	for dg, cn := range m.ChannelNames() {
+		for _, ch := range cn {
 			value, err := m.GetChannelSample(dg, ch)
 			if err != nil {
 				fmt.Println(err)
 			}
-			fmt.Printf("\nChannel %s ==> Value %v",ch,value)
+			fmt.Printf("\nChannel %s ==> Value %v", ch, value)
 		}
 	}
-	
 
 	//Extract embedded and compressed files from MF4
 	fa := []app.AttFile{}
