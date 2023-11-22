@@ -125,3 +125,7 @@ func (b *Block) BlankBlock() *Block {
 		Data: Data{},
 	}
 }
+
+func (b *Block) FirstChannel() int64 {
+	return b.Link.CnFirst
+}

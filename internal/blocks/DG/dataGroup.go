@@ -101,3 +101,15 @@ func (b *Block) BlankBlock() *Block {
 		Data: Data{},
 	}
 }
+
+func (b *Block) MetadataComment() int64 {
+	return b.Link.MdComment
+}
+
+func (b *Block) FirstChannelGroup() int64 {
+	return b.Link.CgFirst
+}
+
+func (b *Block) Next() int64 {
+	return b.Link.Next
+}

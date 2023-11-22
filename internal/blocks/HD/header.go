@@ -38,7 +38,10 @@ type Data struct {
 
 const blockID string = blocks.HdID
 
-// New() seek and read to Block struct based on startAddress and blockSize
+// New() seek and read to Block struct based on startAddress and blockSize.
+//
+// The HDBLOCK always begins at file position 64. It contains general information about the
+// contents of the measured data file and is the root for the block hierarchy.
 func New(file *os.File, startAdress int64) *Block {
 	var blockSize uint64 = blocks.HeaderSize
 	var b Block
