@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"time"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 	"github.com/LincolnG4/GoMDF/internal/blocks/AT"
@@ -69,28 +70,25 @@ func (m *MF4) read(getXML bool) {
 	index := 0
 	version := m.MdfVersion()
 	NextAddressDG := m.firstDataGroup()
-	//Get all DataGroup
+
 	for NextAddressDG != 0 {
 		dgBlock := DG.New(file, NextAddressDG)
-		//Read MdBlocks inside
 		mdCommentAddr := dgBlock.MetadataComment()
 		if mdCommentAddr != 0 {
 			comment := *MD.New(file, mdCommentAddr)
 			fmt.Printf("%s\n", comment)
 		}
-		//From DGBLOCK read ChannelGroup
+
 		indexCG := 0
 		NextAddressCG := dgBlock.FirstChannelGroup()
-
 		for NextAddressCG != 0 {
 			cgBlock := CG.New(file, version, NextAddressCG)
-			//Save Informations
 			channelGroup := &ChannelGroup{
 				Block:     cgBlock,
 				Channels:  make(map[string]*CN.Block),
 				Datagroup: dgBlock,
 			}
-			//From CGBLOCK read Channel
+
 			indexCN := 0
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
@@ -330,4 +328,133 @@ func debug(file *os.File, offset int64, size int) {
 		}
 	}
 	spew.Dump(buf)
+}
+
+// Version method returns the MDF file version
+func (m *MF4) Version() string {
+	return string(m.Identification.Version[:])
+}
+
+// ID method returns the MDF file ID
+func (m *MF4) ID() string {
+	return string(m.Identification.File[:])
+}
+
+// CreatedBy method returns the MDF Program identifier
+func (m *MF4) CreatedBy() string {
+	return string(m.Identification.Program[:])
+}
+
+// VersionNumber method returns the Version number of the MDF format, i.e. 420
+func (m *MF4) MdfVersion() uint16 {
+	return m.Identification.VersionNumber
+}
+
+// isUnfinalized method returns Standard flags for unfinalized MDF
+func (m *MF4) IsFinalized() bool {
+	return m.Identification.UnfinalizedFlag == 0
+}
+
+func (m *MF4) firstDataGroup() int64 {
+	return m.Header.Link.DgFirst
+}
+
+func (m *MF4) firstFileHistory() int64 {
+	return m.Header.Link.FhFirst
+}
+
+func (m *MF4) firstAttachment() int64 {
+	return m.Header.Link.AtFirst
+}
+
+func (m *MF4) StartTimeNs() uint64 {
+	tns := m.Header.Data.StartTimeNs
+	if m.isTimeOffsetValid() {
+		return tns
+	}
+	return tns + uint64(m.getTimezoneOffsetMin()) + uint64(m.getDaylightOffsetMin())
+}
+
+func (m *MF4) StartTimeLT() time.Time {
+	return time.Unix(0, int64(m.StartTimeNs()))
+}
+
+// Time zone offset in minutes. Range (-840, 840) minutes. For instance,
+// a value of 60 minutes implies UTC+1 time zone, corresponding to Central
+// European Time (CET).
+func (m *MF4) TimezoneOffsetMin() (int16, error) {
+	if !m.isTimeOffsetValid() {
+		return 0, fmt.Errorf("timezone is not valid for this file")
+	}
+	return m.getTimezoneOffsetMin(), nil
+}
+
+func (m *MF4) getTimezoneOffsetMin() int16 {
+	return m.Header.Data.TZOffsetMin
+}
+
+// Daylight saving time (DST) offset in minutes for the starting timestamp.
+// During the summer months, many regions observe a DST offset of 60 minutes
+// (1 hour).
+func (m *MF4) DaylightOffsetMin() (int16, error) {
+	if !m.isTimeOffsetValid() {
+		return 0, fmt.Errorf("daylight is not valid for this file")
+	}
+	return m.getDaylightOffsetMin(), nil
+}
+
+func (m *MF4) getDaylightOffsetMin() int16 {
+	return m.Header.Data.TZOffsetMin
+}
+
+// [False]: Local time flag
+//
+// [True]: Time offsets valid flag
+func (m *MF4) isTimeOffsetValid() bool {
+	return m.Header.Data.TimeFlags == 1
+}
+
+// Start angle in radians at the beginning of the measurement serves as the
+// reference point for angle synchronous measurements.
+func (m *MF4) StartAngleRad() (float64, error) {
+	if !m.isDistanceValid() {
+		return 0, fmt.Errorf("start angle rad is not valid for this file")
+	}
+	return m.getStartAngleRad(), nil
+}
+
+// Start distance in meters in meters at the beginning of the measurement serves
+// as the reference point for distance synchronous measurements.
+func (m *MF4) StartDistanceM() (float64, error) {
+	if m.isDistanceValid() {
+		return 0, fmt.Errorf("start distance meters is not valid for this file")
+	}
+	return m.getStartDistanceM(), nil
+}
+
+func (m *MF4) getStartAngleRad() float64 {
+	return m.Header.Data.StartAngleRad
+}
+
+func (m *MF4) getStartDistanceM() float64 {
+	return m.Header.Data.StartDistM
+}
+
+func (m *MF4) isDistanceValid() bool {
+	return m.Header.Data.Flags == 1
+}
+
+func (m *MF4) getTimeClass() uint8 {
+	return m.Header.Data.TimeClass
+}
+
+func (m *MF4) GetMeasureComment() string {
+	if m.getHeaderMdComment() == 0 {
+		return ""
+	}
+	return *TX.GetText(m.File, m.getHeaderMdComment())
+}
+
+func (m *MF4) getHeaderMdComment() int64 {
+	return m.Header.Link.MdComment
 }

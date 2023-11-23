@@ -16,20 +16,34 @@ type Block struct {
 }
 
 type Link struct {
-	Next        int64 //Pointer to next channel group block (CGBLOCK)
-	CnFirst     int64 //Pointer to first channel block (CNBLOCK)
-	TxAcqName   int64 //Pointer to acquisition name (TXBLOCK)
-	SiAcqSource int64 //Pointer to acquisition source (SIBLOCK)
-	SrFirst     int64 //Pointer to first sample reduction block (SRBLOCK)
-	MdComment   int64 //Pointer to comment and additional information (TXBLOCK or MDBLOCK)
-	CgMaster    int64 // Version 4.2
+	//Pointer to next channel group block (CGBLOCK)
+	Next int64
+
+	//Pointer to first channel block (CNBLOCK)
+	CnFirst int64
+
+	//Pointer to acquisition name (TXBLOCK)
+	TxAcqName int64
+
+	//Pointer to acquisition source (SIBLOCK)
+	SiAcqSource int64
+
+	//Pointer to first sample reduction block (SRBLOCK)
+	SrFirst int64
+
+	//Pointer to comment and additional information (TXBLOCK or MDBLOCK)
+	MdComment int64
+
+	// Version 4.2
+	CgMaster int64
 }
 
 type Data struct {
-	RecordId      uint64
-	CycleCount    uint64
-	Flags         uint16
-	PathSeparator uint16 // Version 4.1
+	RecordId   uint64
+	CycleCount uint64
+	Flags      uint16
+	// Version 4.1
+	PathSeparator uint16
 	Reserved      [4]byte
 	DataBytes     uint32
 	InvalBytes    uint32

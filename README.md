@@ -33,12 +33,12 @@ import (
  "io"
  "os"
 
- mf4 "github.com/LincolnG4/GoMDF"
  "github.com/LincolnG4/GoMDF/app"
+ "github.com/LincolnG4/GoMDF/mf4"
 )
 
 func main() {
- file, err := os.Open("sample.MF4")
+ file, err := os.Open("/PATH/TO/file.mf4")
 
  if err != nil {
   if err != io.EOF {
@@ -47,7 +47,6 @@ func main() {
   }
 
  }
-
  defer file.Close()
 
  m, err := mf4.ReadFile(file, true)
@@ -55,30 +54,34 @@ func main() {
   fmt.Println(err)
  }
 
- version := m.Version()
- fmt.Println(version)
-
+ fmt.Println("Version ID --> ", m.MdfVersion())
+ fmt.Println("Start Time NS --> ", m.StartTimeNs())
+ fmt.Println("Start StartTimeLT --> ", m.StartTimeLT())
+ cc, _ := m.StartDistanceM()
+ fmt.Println("Start Distance M --> ", cc)
+ dd, _ := m.StartAngleRad()
+ fmt.Println("Start Angle Rad --> ", dd)
+ fmt.Println(m.GetMeasureComment())
  //Return all channels availables
  channels := m.ChannelNames()
  fmt.Println(channels)
 
- for dg,cn := range m.ChannelNames(){
-  for _,ch := range cn {
-   value, err := m.GetChannelSample(dg, ch)
-   if err != nil {
-    fmt.Println(err)
-   }
-   fmt.Printf("\nChannel %s ==> Value %v",ch,value)
-  }
+ // for dg,cn := range m.ChannelNames(){
+ // for _, ch := range cn {
+ value, err := m.GetChannelSample(0, "dwordCounter")
+ if err != nil {
+  fmt.Println(err)
  }
- 
+ fmt.Printf("\nChannel %s ==> Value %v", "Triangle", value)
+ // }
+ // }
 
  //Extract embedded and compressed files from MF4
  fa := []app.AttFile{}
- for _, value := range m.Attachments {
-  fa = append(fa, value.ExtractAttachment(file, "./home/"))
+ for _, value := range m.LoadAttachmemt() {
+  fa = append(fa, value.ExtractAttachment(file, "/PATH/TO/SAVE/"))
  }
  fmt.Println(fa)
-} 
+}
 
 ```
