@@ -43,7 +43,7 @@ func New(file *os.File, startAdress int64) *string {
 	if string(b.Header.ID[:]) == blocks.MdID {
 		blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
 		buf := make([]byte, blockSize)
-		b.Data = *blocks.GetText(file, startAdress, buf, true)
+		b.Data = blocks.GetText(file, startAdress, buf, true)
 		r := string(b.Data)
 		return &r
 	}

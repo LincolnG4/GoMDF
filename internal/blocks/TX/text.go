@@ -44,7 +44,7 @@ func GetText(file *os.File, startAdress int64) *string {
 		b.BlankBlock()
 	}
 
-	if string(b.Header.ID[:]) != blockID {
+	if string(b.Header.ID[:]) != blockID && string(b.Header.ID[:]) != blocks.MdID {
 		fmt.Printf("ERROR NOT %s", blockID)
 	}
 
@@ -53,7 +53,7 @@ func GetText(file *os.File, startAdress int64) *string {
 	b.Data = Data{}
 	buff := make([]byte, blockSize)
 	t := blocks.GetText(file, startAdress, buff, true)
-	result := string(bytes.Trim(*t, "\x00"))
+	result := string(bytes.Trim(t, "\x00"))
 	return &result
 }
 

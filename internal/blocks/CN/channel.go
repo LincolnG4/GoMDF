@@ -24,22 +24,26 @@ type Link struct {
 	Data         int64
 	MdUnit       int64
 	MdComment    int64
-	AtReference  int64    //Version 4.1
-	DefaultX     [3]int64 //Version 4.1
+	//Version 4.1
+	AtReference int64
+	//Version 4.1
+	DefaultX [3]int64
 }
 
 type Data struct {
-	Type            uint8
-	SyncType        uint8
-	DataType        uint8
-	BitOffset       uint8
-	ByteOffset      uint32
-	BitCount        uint32
-	Flags           uint32
-	InvalBitPos     uint32
-	Precision       uint8
-	Reserved        uint8  // Use [1]byte for versions >= 4.1
-	AttachmentCount uint16 //Version 4.1
+	Type        uint8
+	SyncType    uint8
+	DataType    uint8
+	BitOffset   uint8
+	ByteOffset  uint32
+	BitCount    uint32
+	Flags       uint32
+	InvalBitPos uint32
+	Precision   uint8
+	// Use [1]byte for versions >= 4.1
+	Reserved uint8
+	//Version 4.1
+	AttachmentCount uint16
 	ValRangeMin     float64
 	ValRangeMax     float64
 	LimitMin        float64

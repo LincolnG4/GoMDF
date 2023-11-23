@@ -33,13 +33,25 @@ type Link struct {
 }
 
 type Data struct {
-	Flags        uint16
-	CreatorIndex uint16 //Creator index, i.e. zero-based index of FHBLOCK in global list of FHBLOCKs that specifies which application has created this attachment, or changed it most recently.
+	Flags uint16
+	// Creator index, i.e. zero-based index of FHBLOCK in global list
+	// of FHBLOCKs that specifies which application has created this attachment,
+	// or changed it most recently.
+	CreatorIndex uint16
 	Reserved     [4]byte
-	MD5Checksum  [16]byte //128-bit value for MD5 check sum (of the uncompressed data if data is embedded and compressed). Only valid if "MD5 check sum valid" flag (bit 2) is set.
-	OriginalSize uint64   //Original data size in Bytes, i.e. either for external file or for compressed data.
-	EmbeddedSize uint64   //Embedded data size N, i.e. number of Bytes for binary embedded data following this element.
-	EmbeddedData []byte   //Contains binary embedded data
+	//128-bit value for MD5 check sum. Only valid if "MD5 check sum valid"
+	// flag (bit 2) is set.
+	MD5Checksum [16]byte
+	//Original data size in Bytes, i.e. either for external file or for
+	// compressed data.
+	OriginalSize uint64
+
+	// Embedded data size N, i.e. number of Bytes for binary embedded data
+	// following this element.
+	EmbeddedSize uint64
+
+	//Contains binary embedded data
+	EmbeddedData []byte
 }
 
 const blockID string = blocks.AtID
@@ -104,7 +116,7 @@ func (b *Block) BlankBlock() *Block {
 	}
 }
 
-//ExtractAttachment 
+// ExtractAttachment
 func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile {
 	var comment string
 
@@ -144,11 +156,11 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 
 		fmt.Printf("\n%s is external, the path to the file is %s", filename, f)
 		return app.AttFile{
-			Name:    filename,
-			Type:    filetype,
-			Comment: comment,
-			Path:    f,
-			CreatorIndex:ci,
+			Name:         filename,
+			Type:         filetype,
+			Comment:      comment,
+			Path:         f,
+			CreatorIndex: ci,
 		}
 	}
 	fmt.Println("### Embbeded")
@@ -161,23 +173,23 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 
 	//Embbeded file - MD5 check sum
 	if blocks.IsBitSet(flag, 2) {
-		if md5.Sum(data) != d.MD5Checksum{
-			fmt.Println("Checksums do not match. The file may be corrupted. File:", filename)	
+		if md5.Sum(data) != d.MD5Checksum {
+			fmt.Println("Checksums do not match. The file may be corrupted. File:", filename)
 		}
 	}
 
 	saveFile(file, p, &data)
 
 	return app.AttFile{
-		Name:    filename,
-		Type:    filetype,
-		Comment: comment,
-		Path:    p,
-		CreatorIndex:ci,
+		Name:         filename,
+		Type:         filetype,
+		Comment:      comment,
+		Path:         p,
+		CreatorIndex: ci,
 	}
 }
 
-//decompressFile uses zlib to decompress databyte
+// decompressFile uses zlib to decompress databyte
 func decompressFile(d *Data) []byte {
 	c := bytes.NewReader(d.EmbeddedData)
 
@@ -192,7 +204,7 @@ func decompressFile(d *Data) []byte {
 	return data
 }
 
-//saveFile saves bytes to target file
+// saveFile saves bytes to target file
 func saveFile(file *os.File, outputPath string, data *[]byte) error {
 	f, err := os.Create(outputPath)
 	if err != nil {

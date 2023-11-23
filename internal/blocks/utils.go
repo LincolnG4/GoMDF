@@ -43,9 +43,9 @@ func seekBinaryByAddress(file *os.File, address int64, block_size int) []byte {
 	return buf
 }
 
-func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) *[]byte {
+func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) []byte {
 	if startAdress == 0 {
-		return &[]byte{}
+		return []byte{}
 	}
 
 	if decode {
@@ -61,9 +61,9 @@ func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) *[]b
 				panic(err)
 			}
 		}
-		return &bufSize
+		return bufSize
 	}
-	return &[]byte{}
+	return []byte{}
 }
 
 func CalculateLinkSize(linkCount uint64) uint64 {
