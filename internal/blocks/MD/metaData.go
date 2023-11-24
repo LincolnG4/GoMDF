@@ -15,7 +15,7 @@ type Block struct {
 	Data   []byte
 }
 
-func New(file *os.File, startAdress int64) *string {
+func New(file *os.File, startAdress int64) string {
 
 	var blockSize uint64 = blocks.HeaderSize
 	var b Block
@@ -45,7 +45,7 @@ func New(file *os.File, startAdress int64) *string {
 		buf := make([]byte, blockSize)
 		b.Data = blocks.GetText(file, startAdress, buf, true)
 		r := string(b.Data)
-		return &r
+		return r
 	}
 
 	return TX.GetText(file, startAdress)

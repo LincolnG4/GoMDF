@@ -162,3 +162,6 @@ func (b *Block) BlankBlock() *Block {
 func (b *Block) GetSignalData(file *os.File, startAdress uint64, recordsize uint8, size uint64) {
 
 }
+func (b *Block) Next() int64 {
+	return b.Link.Next
+}

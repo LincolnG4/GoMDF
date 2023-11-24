@@ -126,9 +126,9 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 	flag := int(d.Flags)
 	data := d.EmbeddedData
 
-	f := strings.ReplaceAll(string(*TX.GetText(file, b.Link.TxFilename)), "\\", string(os.PathSeparator))
+	f := strings.ReplaceAll(string(TX.GetText(file, b.Link.TxFilename)), "\\", string(os.PathSeparator))
 	filename := filepath.Base(f)
-	filetype := *TX.GetText(file, b.Link.TxMimetype)
+	filetype := TX.GetText(file, b.Link.TxMimetype)
 
 	ci := fmt.Sprint(d.CreatorIndex)
 	//If file has no extension, try to save it by mime
@@ -151,7 +151,7 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 	if !blocks.IsBitSet(flag, 0) {
 		MdCommentAdress := b.Link.MDComment
 		if MdCommentAdress != 0 {
-			comment = string(*MD.New(file, MdCommentAdress))
+			comment = string(MD.New(file, MdCommentAdress))
 		}
 
 		fmt.Printf("\n%s is external, the path to the file is %s", filename, f)
@@ -252,4 +252,8 @@ func (b *Block) loadData(file *os.File, adress int64) *Data {
 	d.EmbeddedData = buffEach[40:]
 
 	return &d
+}
+
+func (b *Block) Next() int64 {
+	return b.Link.Next
 }

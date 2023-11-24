@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
+	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
 )
 
 type Block struct {
@@ -101,4 +102,24 @@ func (b *Block) BlankBlock() *Block {
 		Link: Link{},
 		Data: Data{},
 	}
+}
+
+func (b *Block) GetChangeLog(file *os.File) string {
+	return TX.GetText(file, b.GetMdComment())
+}
+
+func (b *Block) GetMdComment() int64 {
+	return b.Link.MDComment
+}
+
+func (b *Block) GetTimeNs() int64 {
+	return int64(b.Data.TimeNS)
+}
+
+func (b *Block) GetTimeFlag() uint8 {
+	return b.Data.TimeFlags
+}
+
+func (b *Block) Next() int64 {
+	return b.Link.Next
 }
