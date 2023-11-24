@@ -27,7 +27,7 @@ type MF4 struct {
 	File           *os.File
 	Header         *HD.Block
 	Identification *ID.Block
-	FileHistory    []*FH.Block
+	FileHistory    int64
 	ChannelGroup   []*ChannelGroup
 }
 
@@ -43,21 +43,20 @@ func ReadFile(file *os.File, getXML bool) (*MF4, error) {
 		File:           file,
 		Identification: ID.New(file, address),
 	}
-	fmt.Printf("%+v \n", mf4File.Identification)
 	fileVersion := mf4File.MdfVersion()
 	if fileVersion < 400 {
 		return nil, fmt.Errorf("file version is not >= 4.00")
 	}
 
 	if fileVersion >= 400 {
-		mf4File.getHeader()
-		mf4File.loadFileHistory(getXML)
+		mf4File.loadHeader()
+		mf4File.loadFirstFileHistory()
 		mf4File.read(getXML)
 	}
 	return &mf4File, nil
 }
 
-func (m *MF4) getHeader() {
+func (m *MF4) loadHeader() {
 	m.Header = HD.New(m.File, blocks.IdblockSize)
 }
 
@@ -67,19 +66,17 @@ func (m *MF4) read(getXML bool) {
 	if !m.IsFinalized() {
 		panic("NOT FINALIZED MF4, PACKAGE IS NOT PREPARED")
 	}
-	index := 0
+
 	version := m.MdfVersion()
 	NextAddressDG := m.firstDataGroup()
-
 	for NextAddressDG != 0 {
 		dgBlock := DG.New(file, NextAddressDG)
 		mdCommentAddr := dgBlock.MetadataComment()
 		if mdCommentAddr != 0 {
-			comment := *MD.New(file, mdCommentAddr)
+			comment := MD.New(file, mdCommentAddr)
 			fmt.Printf("%s\n", comment)
 		}
 
-		indexCG := 0
 		NextAddressCG := dgBlock.FirstChannelGroup()
 		for NextAddressCG != 0 {
 			cgBlock := CG.New(file, version, NextAddressCG)
@@ -89,15 +86,12 @@ func (m *MF4) read(getXML bool) {
 				Datagroup: dgBlock,
 			}
 
-			indexCN := 0
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
-				channelName := *TX.GetText(file, cnBlock.Link.TxName)
-
+				channelName := TX.GetText(file, cnBlock.Link.TxName)
 				//Remove 00 bytes from the name
 				channelGroup.Channels[channelName] = cnBlock
-
 				//Get XML comments
 				MdCommentAdress := cnBlock.Link.MdComment
 				if getXML && MdCommentAdress != 0 {
@@ -108,16 +102,13 @@ func (m *MF4) read(getXML bool) {
 					mdComment := ""
 					fmt.Print(mdComment, mdBlock, "\n")
 				}
-				nextAddressCN = cnBlock.Link.Next
-				indexCN++
+				nextAddressCN = cnBlock.Next()
 			}
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
-			NextAddressCG = cgBlock.Link.Next
-			indexCG++
+			NextAddressCG = cgBlock.Next()
 		}
 		fmt.Println("\n##############################")
 		NextAddressDG = dgBlock.Next()
-		index++
 	}
 }
 
@@ -267,51 +258,26 @@ func loadDataType(dataType uint8, lenSize int) interface{} {
 
 // LoadAttachmemt iterates over all AT blocks and append array to MF4 object
 func (m *MF4) LoadAttachmemt() []*AT.Block {
-	var index int = 0
 	atArr := make([]*AT.Block, 0)
-	nextAddressAT := m.firstAttachment()
+	nextAddressAT := m.getFirstAttachment()
 	file := m.File
 	for nextAddressAT != 0 {
 		atBlock := AT.New(file, nextAddressAT)
 		fileName := TX.GetText(file, atBlock.Link.TxFilename)
 		mimeType := TX.GetText(file, atBlock.Link.TxMimetype)
-		fmt.Printf("Filename attached: %s\n", *fileName)
-		fmt.Printf("Mime attached: %s\n", *mimeType)
+		fmt.Printf("Filename attached: %s\n", fileName)
+		fmt.Printf("Mime attached: %s\n", mimeType)
 
 		//Read MDComment
 		MdCommentAdress := atBlock.Link.MDComment
 		if MdCommentAdress != 0 {
 			comment := MD.New(file, MdCommentAdress)
-			fmt.Printf("%s\n", *comment)
-		}
-
-		atArr = append(atArr, atBlock)
-		nextAddressAT = atBlock.Link.Next
-		index++
-	}
-	return atArr
-}
-
-// LoadFileHistory iterates over all FH blocks and append array to MF4 object
-func (m *MF4) loadFileHistory(getXML bool) {
-	var index int = 0
-
-	array := make([]*FH.Block, 0)
-	nextAddressFH := m.firstFileHistory()
-	//iterate over all FH blocks
-	for nextAddressFH != 0 {
-		fhBlock := FH.New(m.File, nextAddressFH)
-		MdCommentAdress := fhBlock.Link.MDComment
-		//Read MDComment
-		if MdCommentAdress != 0 {
-			comment := *MD.New(m.File, MdCommentAdress)
 			fmt.Printf("%s\n", comment)
 		}
-		array = append(array, fhBlock)
-		nextAddressFH = fhBlock.Link.Next
-		index++
+		atArr = append(atArr, atBlock)
+		nextAddressAT = atBlock.Next()
 	}
-	m.FileHistory = array
+	return atArr
 }
 
 func debug(file *os.File, offset int64, size int) {
@@ -359,59 +325,12 @@ func (m *MF4) firstDataGroup() int64 {
 	return m.Header.Link.DgFirst
 }
 
-func (m *MF4) firstFileHistory() int64 {
-	return m.Header.Link.FhFirst
+func (m *MF4) loadFirstFileHistory() {
+	m.FileHistory = m.Header.Link.FhFirst
 }
 
-func (m *MF4) firstAttachment() int64 {
+func (m *MF4) getFirstAttachment() int64 {
 	return m.Header.Link.AtFirst
-}
-
-func (m *MF4) StartTimeNs() uint64 {
-	tns := m.Header.Data.StartTimeNs
-	if m.isTimeOffsetValid() {
-		return tns
-	}
-	return tns + uint64(m.getTimezoneOffsetMin()) + uint64(m.getDaylightOffsetMin())
-}
-
-func (m *MF4) StartTimeLT() time.Time {
-	return time.Unix(0, int64(m.StartTimeNs()))
-}
-
-// Time zone offset in minutes. Range (-840, 840) minutes. For instance,
-// a value of 60 minutes implies UTC+1 time zone, corresponding to Central
-// European Time (CET).
-func (m *MF4) TimezoneOffsetMin() (int16, error) {
-	if !m.isTimeOffsetValid() {
-		return 0, fmt.Errorf("timezone is not valid for this file")
-	}
-	return m.getTimezoneOffsetMin(), nil
-}
-
-func (m *MF4) getTimezoneOffsetMin() int16 {
-	return m.Header.Data.TZOffsetMin
-}
-
-// Daylight saving time (DST) offset in minutes for the starting timestamp.
-// During the summer months, many regions observe a DST offset of 60 minutes
-// (1 hour).
-func (m *MF4) DaylightOffsetMin() (int16, error) {
-	if !m.isTimeOffsetValid() {
-		return 0, fmt.Errorf("daylight is not valid for this file")
-	}
-	return m.getDaylightOffsetMin(), nil
-}
-
-func (m *MF4) getDaylightOffsetMin() int16 {
-	return m.Header.Data.TZOffsetMin
-}
-
-// [False]: Local time flag
-//
-// [True]: Time offsets valid flag
-func (m *MF4) isTimeOffsetValid() bool {
-	return m.Header.Data.TimeFlags == 1
 }
 
 // Start angle in radians at the beginning of the measurement serves as the
@@ -452,9 +371,56 @@ func (m *MF4) GetMeasureComment() string {
 	if m.getHeaderMdComment() == 0 {
 		return ""
 	}
-	return *TX.GetText(m.File, m.getHeaderMdComment())
+	return TX.GetText(m.File, m.getHeaderMdComment())
 }
 
 func (m *MF4) getHeaderMdComment() int64 {
 	return m.Header.Link.MdComment
+}
+
+func (m *MF4) ReadChangeLog() {
+	nextAddressFH := m.getFileHistory()
+	for nextAddressFH != 0 {
+		fhBlock := FH.New(m.File, nextAddressFH)
+		c := fhBlock.GetChangeLog(m.File)
+		t := fhBlock.GetTimeNs()
+		f := fhBlock.GetTimeFlag()
+
+		fmt.Println(m.formatLog(t, f, c))
+
+		nextAddressFH = fhBlock.Next()
+	}
+}
+
+func (m *MF4) StartTimeNs() int64 {
+	t := m.geStartTimeNs()
+	tzo := uint64(m.getHDTimezoneOffsetMin())
+	dlo := uint64(m.getDaylightOffsetMin())
+	tf := m.getTimeFlag()
+	return m.GetTimeNs(t, tzo, dlo, tf)
+}
+
+func (m *MF4) StartTimeLT() time.Time {
+	return m.formatTimeLT(m.StartTimeNs())
+}
+
+func (m *MF4) getFileHistory() int64 {
+	return m.FileHistory
+}
+
+func (m *MF4) formatLog(t int64, f uint8, c string) string {
+	ts := m.formatTimeLT(t)
+	return fmt.Sprint(ts, c)
+}
+
+func (m *MF4) getHDTimezoneOffsetMin() int16 {
+	return m.Header.Data.TZOffsetMin
+}
+
+func (m *MF4) getTimeFlag() uint8 {
+	return m.Header.Data.TimeFlags
+}
+
+func (m *MF4) geStartTimeNs() uint64 {
+	return m.Header.Data.StartTimeNs
 }

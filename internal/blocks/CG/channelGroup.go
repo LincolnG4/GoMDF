@@ -143,3 +143,7 @@ func (b *Block) BlankBlock() *Block {
 func (b *Block) FirstChannel() int64 {
 	return b.Link.CnFirst
 }
+
+func (b *Block) Next() int64 {
+	return b.Link.Next
+}
