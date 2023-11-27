@@ -76,12 +76,12 @@ func main() {
  // }
  // }
 
- //Extract embedded and compressed files from MF4
- fa := []app.AttFile{}
- for _, value := range m.LoadAttachmemt() {
-  fa = append(fa, value.ExtractAttachment(file, "/PATH/TO/SAVE/"))
- }
+  //Extract embedded and compressed files from MF4
+ fa := m.GetAttachmemts()
  fmt.Println(fa)
-}
+ d := m.SaveAttachment(fa[1], "/home/lincolng/Downloads/testFolder/")
+ fmt.Println(d)
+
+ m.ReadChangeLog()
 
 ```
