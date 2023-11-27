@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
+	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
 )
 
 type Block struct {
@@ -83,11 +84,9 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 	fmt.Printf("\n%s\n", b.Header.ID)
 	fmt.Printf("%+v\n", b.Header)
-
 	//Calculates size of Link Block
 	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
 	buffEach := make([]byte, blockSize)
-
 	// Read the Link section from the binary file
 	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
 		fmt.Println("Error reading Link section:", err)
@@ -114,9 +113,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		MdUnit:       linkFields[6],
 		MdComment:    linkFields[7],
 	}
-
 	fmt.Printf("%+v\n", b.Link)
-
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
 	buf = blocks.LoadBuffer(file, blockSize)
@@ -139,11 +136,8 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		b.Link.DefaultX = [3]int64{linkFields[9], linkFields[10], linkFields[11]}
 		fmt.Println("DefaultX Flagged")
 	}
-
 	fmt.Printf("%+v\n", b.Data)
-
 	return &b
-
 }
 
 func (b *Block) BlankBlock() *Block {
@@ -162,6 +156,19 @@ func (b *Block) BlankBlock() *Block {
 func (b *Block) GetSignalData(file *os.File, startAdress uint64, recordsize uint8, size uint64) {
 
 }
+
+func (b *Block) GetChannelName(f *os.File) string {
+	return TX.GetText(f, b.getTxName())
+}
+
+func (b *Block) getTxName() int64 {
+	return b.Link.TxName
+}
+
+func (b *Block) GetCommentMd() int64 {
+	return b.Link.MdComment
+}
+
 func (b *Block) Next() int64 {
 	return b.Link.Next
 }

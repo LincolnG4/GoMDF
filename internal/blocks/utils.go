@@ -8,8 +8,6 @@ import (
 	"os"
 )
 
-type Link int64
-
 type Header struct {
 	ID        [4]byte
 	Reserved  [4]byte
@@ -107,7 +105,6 @@ func ReadAllFromBinary(file *os.File) int64 {
 func IsBitSet(value int, bitPosition int) bool {
 	// Create a bitmask with the target bit set (1) and all other bits unset (0)
 	bitmask := 1 << (bitPosition) // 2
-
 	// Use bitwise AND to check if the target bit is set
 	return (value & bitmask) != 0 // 5 & 2 != 0  false
 }

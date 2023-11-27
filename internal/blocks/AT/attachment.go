@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/LincolnG4/GoMDF/app"
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 	"github.com/LincolnG4/GoMDF/internal/blocks/MD"
 	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
@@ -54,7 +53,14 @@ type Data struct {
 	EmbeddedData []byte
 }
 
-const blockID string = blocks.AtID
+type AttFile struct {
+	Name         string
+	Type         string
+	Comment      string
+	Path         string
+	CreatorIndex string
+	block        *Block
+}
 
 func New(file *os.File, startAdress int64) *Block {
 	var b Block
@@ -69,10 +75,8 @@ func New(file *os.File, startAdress int64) *Block {
 	}
 
 	b.Header = blocks.Header{}
-
 	//Create a buffer based on blocksize
 	buf := blocks.LoadBuffer(file, blockSize)
-
 	//Read header
 	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
@@ -80,18 +84,16 @@ func New(file *os.File, startAdress int64) *Block {
 		b.BlankBlock()
 	}
 
-	if string(b.Header.ID[:]) != blockID {
-		fmt.Printf("ERROR NOT %s", blockID)
+	if string(b.Header.ID[:]) != blocks.AtID {
+		fmt.Printf("ERROR NOT %s", blocks.AtID)
 	}
 
 	fmt.Printf("\n%s\n", b.Header.ID)
 	fmt.Printf("%+v\n", b.Header)
-
 	//Calculates size of Link Block
 	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
 	b.Link = Link{}
 	buf = blocks.LoadBuffer(file, blockSize)
-
 	//Create a buffer based on blocksize
 	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
@@ -99,8 +101,25 @@ func New(file *os.File, startAdress int64) *Block {
 	}
 
 	fmt.Printf("%+v\n", b.Link)
-
 	return &b
+}
+
+func (b *Block) LoadAttachmentFile(file *os.File) *AttFile {
+	var fileName string
+
+	if b.GetTxFilename() != 0 {
+		fileName = b.GetFileName(file, b.GetTxFilename())
+	}
+	mimeType := b.GetMimeType(file, b.GetTxMimeType())
+	fmt.Printf("Filename attached: %s\n", fileName)
+	fmt.Printf("Mime attached: %s\n", mimeType)
+	//Read MDComment
+	MdCommentAdress := b.GetMdComment()
+	if MdCommentAdress != 0 {
+		comment := MD.New(file, MdCommentAdress)
+		fmt.Printf("%s\n", comment)
+	}
+	return &AttFile{}
 }
 
 func (b *Block) BlankBlock() *Block {
@@ -116,21 +135,24 @@ func (b *Block) BlankBlock() *Block {
 	}
 }
 
-// ExtractAttachment
-func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile {
-	var comment string
+func (a AttFile) getBlock() *Block {
+	return a.block
+}
 
+func (a AttFile) Save(file *os.File, outputPath string) AttFile {
+	b := a.getBlock()
 	//Load data to block
-	addr := b.Address + int64(blocks.HeaderSize) + int64(blocks.CalculateLinkSize(b.Header.LinkCount))
-	d := b.loadData(file, addr)
+	addr := b.Address + int64(blocks.HeaderSize) + int64(blocks.CalculateLinkSize(a.block.Header.LinkCount))
+	d, err := b.loadData(file, addr)
+	if err != nil {
+		fmt.Println(err)
+	}
 	flag := int(d.Flags)
 	data := d.EmbeddedData
-
-	f := strings.ReplaceAll(string(TX.GetText(file, b.Link.TxFilename)), "\\", string(os.PathSeparator))
-	filename := filepath.Base(f)
+	a.Path = strings.ReplaceAll(string(TX.GetText(file, b.GetTxFilename())), "\\", string(os.PathSeparator))
+	filename := filepath.Base(a.Path)
 	filetype := TX.GetText(file, b.Link.TxMimetype)
-
-	ci := fmt.Sprint(d.CreatorIndex)
+	a.CreatorIndex = fmt.Sprint(d.CreatorIndex)
 	//If file has no extension, try to save it by mime
 	if filepath.Ext(filename) == "" {
 		ext, err := mime.ExtensionsByType(filetype)
@@ -144,24 +166,15 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 		}
 	}
 
-	//Create file output
-	p := filepath.Join(outputPath + filename)
-
 	//External File
 	if !blocks.IsBitSet(flag, 0) {
-		MdCommentAdress := b.Link.MDComment
+		MdCommentAdress := b.GetMdComment()
 		if MdCommentAdress != 0 {
-			comment = string(MD.New(file, MdCommentAdress))
+			a.Comment = string(MD.New(file, MdCommentAdress))
 		}
 
-		fmt.Printf("\n%s is external, the path to the file is %s", filename, f)
-		return app.AttFile{
-			Name:         filename,
-			Type:         filetype,
-			Comment:      comment,
-			Path:         f,
-			CreatorIndex: ci,
-		}
+		fmt.Printf("\n%s is external, the path to the file is %s", filename, a.Path)
+		return a
 	}
 	fmt.Println("### Embbeded")
 
@@ -178,21 +191,15 @@ func (b *Block) ExtractAttachment(file *os.File, outputPath string) app.AttFile 
 		}
 	}
 
+	p := filepath.Join(outputPath + filename)
+	a.Path = p
 	saveFile(file, p, &data)
-
-	return app.AttFile{
-		Name:         filename,
-		Type:         filetype,
-		Comment:      comment,
-		Path:         p,
-		CreatorIndex: ci,
-	}
+	return a
 }
 
 // decompressFile uses zlib to decompress databyte
 func decompressFile(d *Data) []byte {
 	c := bytes.NewReader(d.EmbeddedData)
-
 	r, err := zlib.NewReader(c)
 	if err != nil {
 		fmt.Println(err)
@@ -216,11 +223,10 @@ func saveFile(file *os.File, outputPath string, data *[]byte) error {
 		fmt.Println("Error to write data to file output: ", err)
 		return err
 	}
-
 	return nil
 }
 
-func (b *Block) loadData(file *os.File, adress int64) *Data {
+func (b *Block) loadData(file *os.File, adress int64) (*Data, error) {
 	_, errs := file.Seek(adress, 0)
 	if errs != nil {
 		if errs != io.EOF {
@@ -233,7 +239,7 @@ func (b *Block) loadData(file *os.File, adress int64) *Data {
 
 	// Read the Link section from the binary file
 	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
-		fmt.Println("Error reading Link section:", err)
+		return &Data{}, fmt.Errorf("error reading link section: ", err)
 	}
 
 	var fixedArray16 [16]byte
@@ -250,8 +256,65 @@ func (b *Block) loadData(file *os.File, adress int64) *Data {
 	d.OriginalSize = binary.LittleEndian.Uint64(buffEach[24:32])
 	d.EmbeddedSize = binary.LittleEndian.Uint64(buffEach[32:40])
 	d.EmbeddedData = buffEach[40:]
+	return &d, nil
+}
 
-	return &d
+func Get(f *os.File, a int64) []AttFile {
+	var fileName, comm string
+	i := 0
+	arr := make([]AttFile, 0)
+	for a != 0 {
+		atBlock := New(f, a)
+		if atBlock.GetTxFilename() != 0 {
+			fileName = atBlock.GetFileName(f, atBlock.GetTxFilename())
+		} else {
+			fileName = fmt.Sprintf("file-%d", i)
+			i++
+		}
+
+		mimeType := atBlock.GetMimeType(f, atBlock.GetTxMimeType())
+		fmt.Printf("Filename attached: %s\n", fileName)
+		fmt.Printf("Mime attached: %s\n", mimeType)
+		//Read MDComment
+		MdCommentAdress := atBlock.GetMdComment()
+		if MdCommentAdress != 0 {
+			comm = MD.New(f, MdCommentAdress)
+			fmt.Printf("%s\n", comm)
+		}
+
+		arr = append(arr, AttFile{
+			Name:    fileName,
+			Type:    mimeType,
+			Comment: comm,
+			block:   atBlock,
+		})
+		a = atBlock.Next()
+	}
+	return arr
+}
+
+func (b *Block) GetTxFilename() int64 {
+	return b.Link.TxFilename
+}
+
+func (b *Block) GetTxMimeType() int64 {
+	return b.Link.TxMimetype
+}
+
+func GetTextString(file *os.File, a int64) string {
+	return TX.GetText(file, a)
+}
+
+func (b *Block) GetFileName(file *os.File, a int64) string {
+	return GetTextString(file, a)
+}
+
+func (b *Block) GetMimeType(file *os.File, a int64) string {
+	return GetTextString(file, a)
+}
+
+func (b *Block) GetMdComment() int64 {
+	return b.Link.MDComment
 }
 
 func (b *Block) Next() int64 {

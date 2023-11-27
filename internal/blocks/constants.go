@@ -13,6 +13,7 @@ const (
 	HdID = "##HD"
 	CaID = "##CA"
 	CcID = "##CC"
+	ChID = "##CH"
 )
 
 const (
@@ -25,4 +26,5 @@ const (
 	DgblockSize = 64
 	CgblockSize = 104
 	CnblockSize = 160
+	ChblockSize = 160
 )
