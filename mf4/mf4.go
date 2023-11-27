@@ -27,8 +27,9 @@ type MF4 struct {
 	File           *os.File
 	Header         *HD.Block
 	Identification *ID.Block
-	FileHistory    int64
-	ChannelGroup   []*ChannelGroup
+	//Address to First File History Block
+	FileHistory  int64
+	ChannelGroup []*ChannelGroup
 }
 
 type ChannelGroup struct {
@@ -89,11 +90,9 @@ func (m *MF4) read(getXML bool) {
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
-				channelName := TX.GetText(file, cnBlock.Link.TxName)
-				//Remove 00 bytes from the name
+				channelName := cnBlock.GetChannelName(m.File)
 				channelGroup.Channels[channelName] = cnBlock
-				//Get XML comments
-				MdCommentAdress := cnBlock.Link.MdComment
+				MdCommentAdress := cnBlock.GetCommentMd()
 				if getXML && MdCommentAdress != 0 {
 					comment := MD.New(file, MdCommentAdress)
 					fmt.Println(comment)
@@ -186,8 +185,7 @@ func (m *MF4) GetChannelSample(dgName int, channelName string) ([]interface{}, e
 			buf := bytes.NewBuffer(data)
 			err := binary.Read(buf, byteOrder, sliceElem)
 			if err != nil {
-				fmt.Println("Error reading:", err)
-				return nil, errors.New("parsing channel error")
+				return nil, fmt.Errorf("error during parsing channel: %s ", err)
 			}
 			sample = append(sample, reflect.ValueOf(sliceElem).Elem().Interface())
 			readAddr += rowSize
@@ -256,28 +254,14 @@ func loadDataType(dataType uint8, lenSize int) interface{} {
 	return dtype
 }
 
-// LoadAttachmemt iterates over all AT blocks and append array to MF4 object
-func (m *MF4) LoadAttachmemt() []*AT.Block {
-	atArr := make([]*AT.Block, 0)
-	nextAddressAT := m.getFirstAttachment()
-	file := m.File
-	for nextAddressAT != 0 {
-		atBlock := AT.New(file, nextAddressAT)
-		fileName := TX.GetText(file, atBlock.Link.TxFilename)
-		mimeType := TX.GetText(file, atBlock.Link.TxMimetype)
-		fmt.Printf("Filename attached: %s\n", fileName)
-		fmt.Printf("Mime attached: %s\n", mimeType)
+// GetAttachmemts iterates over all AT blocks and return to an array
+func (m *MF4) GetAttachmemts() []AT.AttFile {
+	return AT.Get(m.File, m.getFirstAttachment())
+}
 
-		//Read MDComment
-		MdCommentAdress := atBlock.Link.MDComment
-		if MdCommentAdress != 0 {
-			comment := MD.New(file, MdCommentAdress)
-			fmt.Printf("%s\n", comment)
-		}
-		atArr = append(atArr, atBlock)
-		nextAddressAT = atBlock.Next()
-	}
-	return atArr
+// Saves attachment file input to output path
+func (m *MF4) SaveAttachment(a AT.AttFile, op string) AT.AttFile {
+	return a.Save(m.File, op)
 }
 
 func debug(file *os.File, offset int64, size int) {
@@ -350,6 +334,17 @@ func (m *MF4) StartDistanceM() (float64, error) {
 	}
 	return m.getStartDistanceM(), nil
 }
+func (m *MF4) getHDTimezoneOffsetMin() int16 {
+	return m.Header.Data.TZOffsetMin
+}
+
+func (m *MF4) getTimeFlag() uint8 {
+	return m.Header.Data.TimeFlags
+}
+
+func (m *MF4) geStartTimeNs() uint64 {
+	return m.Header.Data.StartTimeNs
+}
 
 func (m *MF4) getStartAngleRad() float64 {
 	return m.Header.Data.StartAngleRad
@@ -392,6 +387,7 @@ func (m *MF4) ReadChangeLog() {
 	}
 }
 
+// StartTimeNs returns the start timestamp of measurement in nanoseconds
 func (m *MF4) StartTimeNs() int64 {
 	t := m.geStartTimeNs()
 	tzo := uint64(m.getHDTimezoneOffsetMin())
@@ -411,16 +407,4 @@ func (m *MF4) getFileHistory() int64 {
 func (m *MF4) formatLog(t int64, f uint8, c string) string {
 	ts := m.formatTimeLT(t)
 	return fmt.Sprint(ts, c)
-}
-
-func (m *MF4) getHDTimezoneOffsetMin() int16 {
-	return m.Header.Data.TZOffsetMin
-}
-
-func (m *MF4) getTimeFlag() uint8 {
-	return m.Header.Data.TimeFlags
-}
-
-func (m *MF4) geStartTimeNs() uint64 {
-	return m.Header.Data.StartTimeNs
 }

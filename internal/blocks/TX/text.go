@@ -19,8 +19,6 @@ type Block struct {
 	Data   Data
 }
 
-const blockID string = blocks.TxID
-
 func GetText(file *os.File, startAdress int64) string {
 	var blockSize uint64 = blocks.HeaderSize
 	var b Block
@@ -39,12 +37,11 @@ func GetText(file *os.File, startAdress int64) string {
 		fmt.Println("ERROR", BinaryError)
 		b.BlankBlock()
 	}
-
-	if string(b.Header.ID[:]) != blockID && string(b.Header.ID[:]) != blocks.MdID {
-		fmt.Printf("ERROR NOT %s or %s", blockID, blocks.MdID)
+	if string(b.Header.ID[:]) != blocks.TxID && string(b.Header.ID[:]) != blocks.MdID {
+		fmt.Printf("ERROR NOT %s or %s", blocks.TxID, blocks.MdID)
 	}
 
-	blockSize = b.Header.Length - uint64(blocks.HeaderSize)
+	blockSize = b.Header.Length - blockSize
 	b.Data = Data{}
 	buff := make([]byte, blockSize)
 	t := blocks.GetText(file, startAdress, buff, true)

@@ -140,10 +140,12 @@ func (b *Block) BlankBlock() *Block {
 	}
 }
 
+// Pointer to first channel block (CNBLOCK)
 func (b *Block) FirstChannel() int64 {
 	return b.Link.CnFirst
 }
 
+// Pointer to next channel group block (CGBLOCK)
 func (b *Block) Next() int64 {
 	return b.Link.Next
 }

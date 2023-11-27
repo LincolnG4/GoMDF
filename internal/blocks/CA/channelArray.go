@@ -53,10 +53,8 @@ func New(file *os.File, startAdress int64) *Block {
 
 	//Read Header Section
 	b.Header = blocks.Header{}
-
 	//Create a buffer based on blocksize
 	buf := blocks.LoadBuffer(file, blockSize)
-
 	//Read header
 	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
@@ -67,12 +65,8 @@ func New(file *os.File, startAdress int64) *Block {
 	if string(b.Header.ID[:]) != blockID {
 		fmt.Printf("ERROR NOT %s", blockID)
 	}
-
 	fmt.Printf("\n%s\n", b.Header.ID)
 	fmt.Printf("%+v\n", b.Header)
-
-	//Calculates size of Link Block
-
 	return &b
 }
 
