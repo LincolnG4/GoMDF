@@ -76,12 +76,14 @@ func main() {
  // }
  // }
 
-  //Extract embedded and compressed files from MF4
+
+ //Extract embedded and compressed files from MF4
  fa := m.GetAttachmemts()
  fmt.Println(fa)
- d := m.SaveAttachment(fa[1], "/home/lincolng/Downloads/testFolder/")
+ d := m.SaveAttachment(fa[1], "/PATH/TO/BE/SAVE/")}
  fmt.Println(d)
 
  m.ReadChangeLog()
+}
 
 ```

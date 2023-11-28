@@ -6,7 +6,6 @@ import (
 	"os"
 
 	mf4 "github.com/LincolnG4/GoMDF"
-	"github.com/LincolnG4/GoMDF/app"
 )
 
 func main() {
@@ -27,8 +26,9 @@ func main() {
 		fmt.Println(err)
 	}
 
-	version := m.Version()
-	fmt.Println(version)
+	fmt.Println("Version ID --> ", m.MdfVersion())
+	fmt.Println("Start Time NS --> ", m.StartTimeNs())
+	fmt.Println("Start Start--> ", m.StartTimeLT())
 
 	//Return all channels availables
 	channels := m.ChannelNames()
@@ -44,10 +44,16 @@ func main() {
 		}
 	}
 
-	//Extract embedded and compressed files from MF4
-	fa := []app.AttFile{}
-	for _, value := range m.Attachments {
-		fa = append(fa, value.ExtractAttachment(file, "/home/lincolng/Downloads/"))
+	value, err := m.GetChannelSample(0, "dwordCounter")
+	if err != nil {
+		fmt.Println(err)
 	}
+	fmt.Printf("\nChannel %s ==> Value %v", "Triangle", value)
+	//Extract embedded and compressed files from MF4
+	fa := m.GetAttachmemts()
 	fmt.Println(fa)
+	d := m.SaveAttachment(fa[1], "/home/lincolng/Downloads/testFolder/")
+	fmt.Println(d)
+
+	m.ReadChangeLog()
 }
