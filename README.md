@@ -2,7 +2,7 @@
 ASAM MDF / MF4 (Measurement Data Format) files editor in GoLang
 Package based on <https://github.com/danielhrisca/asammdf>
 
-⚠️ The package is still under development  !!! ⚠️
+⚠️ The package not finalized   !!! ⚠️
 
 ## **Targets / Tasks**:
 - [ ] Read MF4 Files
@@ -23,7 +23,7 @@ go get github.com/LincolnG4/GoMDF@main
 
 ## Quick Examples
 
-⚠️ The package is still under development !!! ⚠️
+⚠️ The package not finalized !!! ⚠️
 
 ```go
 package main
@@ -75,6 +75,7 @@ func main() {
  fmt.Printf("\nChannel %s ==> Value %v", "Triangle", value)
  // }
  // }
+
 
  //Extract embedded and compressed files from MF4
  fa := m.GetAttachmemts()
