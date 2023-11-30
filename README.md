@@ -73,8 +73,7 @@ func main() {
   fmt.Println(err)
  }
  fmt.Printf("\nChannel %s ==> Value %v", "Triangle", value)
- // }
- // }
+
 
 
  //Extract embedded and compressed files from MF4

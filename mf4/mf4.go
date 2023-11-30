@@ -15,6 +15,7 @@ import (
 	"github.com/LincolnG4/GoMDF/internal/blocks/CG"
 	"github.com/LincolnG4/GoMDF/internal/blocks/CN"
 	"github.com/LincolnG4/GoMDF/internal/blocks/DG"
+	"github.com/LincolnG4/GoMDF/internal/blocks/EV"
 	"github.com/LincolnG4/GoMDF/internal/blocks/FH"
 	"github.com/LincolnG4/GoMDF/internal/blocks/HD"
 	"github.com/LincolnG4/GoMDF/internal/blocks/ID"
@@ -52,9 +53,24 @@ func ReadFile(file *os.File, getXML bool) (*MF4, error) {
 	if fileVersion >= 400 {
 		mf4File.loadHeader()
 		mf4File.loadFirstFileHistory()
+		mf4File.loadEvents()
 		mf4File.read(getXML)
 	}
 	return &mf4File, nil
+}
+
+func (m *MF4) loadEvents() {
+	if m.getFirstEvent() != 0 {
+		nextEvent := m.getFirstEvent()
+		for nextEvent != 0 {
+			event, err := EV.New(m.File, m.MdfVersion(), nextEvent)
+			if err != nil {
+				fmt.Println(err)
+			}
+			nextEvent = event.Next()
+		}
+
+	}
 }
 
 func (m *MF4) loadHeader() {
@@ -315,6 +331,10 @@ func (m *MF4) loadFirstFileHistory() {
 
 func (m *MF4) getFirstAttachment() int64 {
 	return m.Header.Link.AtFirst
+}
+
+func (m *MF4) getFirstEvent() int64 {
+	return m.Header.Link.EvFirst
 }
 
 // Start angle in radians at the beginning of the measurement serves as the
