@@ -27,4 +27,5 @@ const (
 	CgblockSize = 104
 	CnblockSize = 160
 	ChblockSize = 160
+	EvblockSize = 24
 )

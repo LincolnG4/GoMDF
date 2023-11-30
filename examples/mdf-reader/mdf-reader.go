@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	mf4 "github.com/LincolnG4/GoMDF"
+	"github.com/LincolnG4/GoMDF/mf4"
 )
 
 func main() {
@@ -52,7 +52,7 @@ func main() {
 	//Extract embedded and compressed files from MF4
 	fa := m.GetAttachmemts()
 	fmt.Println(fa)
-	d := m.SaveAttachment(fa[1], "/home/lincolng/Downloads/testFolder/")
+	d := m.SaveAttachment(fa[1], "/SAVE/PATH/")
 	fmt.Println(d)
 
 	m.ReadChangeLog()

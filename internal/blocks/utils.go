@@ -69,7 +69,7 @@ func CalculateLinkSize(linkCount uint64) uint64 {
 }
 
 func CalculateDataSize(length uint64, linkCount uint64) uint64 {
-	return (length - uint64(HeaderSize) - linkCount*uint64(LinkSize))
+	return length - uint64(HeaderSize) - linkCount*uint64(LinkSize)
 }
 
 // Create a buffer based on blocksize
