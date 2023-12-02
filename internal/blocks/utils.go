@@ -47,7 +47,7 @@ func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) []by
 	}
 
 	if decode {
-		_, err := file.Seek(int64(startAdress)+HeaderSize, io.SeekStart)
+		_, err := file.Seek(startAdress+int64(HeaderSize), io.SeekStart)
 		if err != nil {
 			panic(err)
 		}
