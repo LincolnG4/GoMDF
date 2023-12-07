@@ -1,6 +1,11 @@
 package blocks
 
 const (
+	Version420 = 420
+	Byte       = 8
+)
+
+const (
 	EvID = "##EV"
 	AtID = "##AT"
 	DgID = "##DG"
@@ -17,15 +22,15 @@ const (
 )
 
 const (
-	LinkSize    = 8
-	HeaderSize  = 24
-	IdblockSize = 64
-	HdblockSize = 104
-	FhblockSize = 56
-	AtblockSize = 96
-	DgblockSize = 64
-	CgblockSize = 104
-	CnblockSize = 160
-	ChblockSize = 160
-	EvblockSize = 24
+	LinkSize    uint64 = 8
+	HeaderSize  uint64 = 24
+	IdblockSize int64  = 64
+	HdblockSize uint64 = 104
+	FhblockSize uint64 = 56
+	AtblockSize uint64 = 96
+	DgblockSize uint64 = 64
+	CgblockSize uint64 = 104
+	CnblockSize uint64 = 160
+	ChblockSize uint64 = 160
+	EvblockSize uint64 = 24
 )

@@ -176,7 +176,7 @@ func (m *MF4) GetChannelSample(dgName int, channelName string) ([]interface{}, e
 
 		dataType := cn.Data.DataType
 
-		readAddr := blocks.HeaderSize + dg.Link.Data + int64(dg.Data.RecIDSize) + int64(cn.Data.ByteOffset)
+		readAddr := int64(blocks.HeaderSize) + dg.Link.Data + int64(dg.Data.RecIDSize) + int64(cn.Data.ByteOffset)
 		size := (cn.Data.BitCount + uint32(cn.Data.BitOffset)) / 8
 		data := make([]byte, size)
 		sample := make([]interface{}, 0)

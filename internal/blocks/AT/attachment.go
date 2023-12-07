@@ -106,6 +106,7 @@ func New(file *os.File, startAdress int64) *Block {
 
 func (b *Block) LoadAttachmentFile(file *os.File) *AttFile {
 	var fileName string
+	var comment string
 
 	if b.GetTxFilename() != 0 {
 		fileName = b.GetFileName(file, b.GetTxFilename())
@@ -116,22 +117,15 @@ func (b *Block) LoadAttachmentFile(file *os.File) *AttFile {
 	//Read MDComment
 	MdCommentAdress := b.GetMdComment()
 	if MdCommentAdress != 0 {
-		comment := MD.New(file, MdCommentAdress)
+		comment = MD.New(file, MdCommentAdress)
 		fmt.Printf("%s\n", comment)
 	}
-	return &AttFile{}
-}
 
-func (b *Block) BlankBlock() *Block {
-	return &Block{
-		Header: blocks.Header{
-			ID:        [4]byte{'#', '#', 'A', 'T'},
-			Reserved:  [4]byte{},
-			Length:    blocks.AtblockSize,
-			LinkCount: 2,
-		},
-		Link: Link{},
-		Data: Data{},
+	return &AttFile{
+		Name:    fileName,
+		Type:    mimeType,
+		Comment: comment,
+		block:   b,
 	}
 }
 
@@ -239,7 +233,7 @@ func (b *Block) loadData(file *os.File, adress int64) (*Data, error) {
 
 	// Read the Link section from the binary file
 	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
-		return &Data{}, fmt.Errorf("error reading link section: ", err)
+		return &Data{}, fmt.Errorf("error reading link section: %v", err)
 	}
 
 	var fixedArray16 [16]byte
@@ -315,6 +309,19 @@ func (b *Block) GetMimeType(file *os.File, a int64) string {
 
 func (b *Block) GetMdComment() int64 {
 	return b.Link.MDComment
+}
+
+func (b *Block) BlankBlock() *Block {
+	return &Block{
+		Header: blocks.Header{
+			ID:        [4]byte{'#', '#', 'A', 'T'},
+			Reserved:  [4]byte{},
+			Length:    blocks.AtblockSize,
+			LinkCount: 2,
+		},
+		Link: Link{},
+		Data: Data{},
+	}
 }
 
 func (b *Block) Next() int64 {

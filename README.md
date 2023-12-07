@@ -1,88 +1,65 @@
-# GoMDF - ASAM MDF for Golang
-ASAM MDF / MF4 (Measurement Data Format) files editor in GoLang
-Package based on <https://github.com/danielhrisca/asammdf>
+# GoMDF
+Go package for reading ASAM MDF files.
 
+## Installation
 ⚠️ The package not finalized   !!! ⚠️
-
-## **Targets / Tasks**:
-- [ ] Read MF4 Files
-- [ ] Write MF4 Files
-- [ ] Optimize  
-- [ ] Read/Write any version of MDF file  
-- [ ] Optimize  
-
-## Getting Started
-
-### Installation  
-
-Use go get to retrieve the package to add it to your GOPATH workspace, or project's Go module dependencies.
-
-```go
-go get github.com/LincolnG4/GoMDF@main
+```
+go get github.com/LincolnG4/GoMDF
 ```
 
-## Quick Examples
+## Usage
 
-⚠️ The package not finalized !!! ⚠️
-
-```go
+```Go
 package main
 
 import (
- "fmt"
- "io"
- "os"
-
- "github.com/LincolnG4/GoMDF/app"
- "github.com/LincolnG4/GoMDF/mf4"
+  "github.com/LincolnG4/GoMDF/mf4"
 )
 
 func main() {
- file, err := os.Open("/PATH/TO/file.mf4")
+  file, err := os.Open("example.mdf")
+  if err != nil {
+    panic(err)
+  }
+  
+  mdf := mf4.ReadFile(file, false)
+  
+  // Access metadata
+  fmt.Println(mdf.Version()) 
+  fmt.Println("Version ID --> ", m.MdfVersion())
+  fmt.Println("Start Time NS --> ", m.StartTimeNs())
+  fmt.Println("Start StartTimeLT --> ", m.StartTimeLT())
 
- if err != nil {
-  if err != io.EOF {
-   fmt.Println("Could not open the file")
-   panic(err)
+  // Get channel samples
+  samples, err := mdf.GetChannelSample(0, "Channel1")
+  if err != nil {
+    panic(err) 
   }
 
- }
- defer file.Close()
+  // Download attachments
+  att := mdf.GetAttachments()[0]
+  mdf.SaveAttachment(att, "/PATH/TO/BE/SAVE/")
 
- m, err := mf4.ReadFile(file, true)
- if err != nil {
-  fmt.Println(err)
- }
-
- fmt.Println("Version ID --> ", m.MdfVersion())
- fmt.Println("Start Time NS --> ", m.StartTimeNs())
- fmt.Println("Start StartTimeLT --> ", m.StartTimeLT())
- cc, _ := m.StartDistanceM()
- fmt.Println("Start Distance M --> ", cc)
- dd, _ := m.StartAngleRad()
- fmt.Println("Start Angle Rad --> ", dd)
- fmt.Println(m.GetMeasureComment())
- //Return all channels availables
- channels := m.ChannelNames()
- fmt.Println(channels)
-
- // for dg,cn := range m.ChannelNames(){
- // for _, ch := range cn {
- value, err := m.GetChannelSample(0, "dwordCounter")
- if err != nil {
-  fmt.Println(err)
- }
- fmt.Printf("\nChannel %s ==> Value %v", "Triangle", value)
-
-
-
- //Extract embedded and compressed files from MF4
- fa := m.GetAttachmemts()
- fmt.Println(fa)
- d := m.SaveAttachment(fa[1], "/PATH/TO/BE/SAVE/")}
- fmt.Println(d)
-
- m.ReadChangeLog()
+  // Read Change logs
+  m.ReadChangeLog()
 }
-
 ```
+
+## Features
+- Parse MDF file format and load metadata
+- Extract channel sample data 
+- Support for attachments
+- Support for Events
+- Access to common metadata fields
+- Documentation
+- API documentation is available at https://godoc.org/github.com/LincolnG4/GoMDF
+
+## Contributing
+Pull requests are welcome! Please open any issues.
+
+This provides a high-level overview of how to use the package from Go code along with installation instructions. Let me know if any part of the README explanation could be improved!
+
+## References 
+
+[ASAM MDF](https://github.com/danielhrisca/asammdf)  
+[MDF Validator ](https://www.vector.com/int/en/products/application-areas/ecu-calibration/measurement/mdf/) 
