@@ -13,36 +13,43 @@ go get github.com/LincolnG4/GoMDF
 package main
 
 import (
-  "github.com/LincolnG4/GoMDF/mf4"
+	"fmt"
+	"os"
+
+	mf4 "github.com/LincolnG4/GoMDF/mf4"
 )
 
 func main() {
-  file, err := os.Open("example.mdf")
-  if err != nil {
-    panic(err)
-  }
-  
-  mdf := mf4.ReadFile(file, false)
-  
-  // Access metadata
-  fmt.Println(mdf.Version()) 
-  fmt.Println("Version ID --> ", m.MdfVersion())
-  fmt.Println("Start Time NS --> ", m.StartTimeNs())
-  fmt.Println("Start StartTimeLT --> ", m.StartTimeLT())
+	file, err := os.Open("sample3.mf4")
+	if err != nil {
+		panic(err)
+	}
 
-  // Get channel samples
-  samples, err := mdf.GetChannelSample(0, "Channel1")
-  if err != nil {
-    panic(err) 
-  }
+	m, err := mf4.ReadFile(file, false)
+	if err != nil {
+		panic(err)
+	}
+	// Access metadata
+	fmt.Println(m.Version())
+	fmt.Println("Version ID --> ", m.MdfVersion())
+	fmt.Println("Start Time NS --> ", m.StartTimeNs())
+	fmt.Println("Start StartTimeLT --> ", m.StartTimeLT())
 
-  // Download attachments
-  att := mdf.GetAttachments()[0]
-  mdf.SaveAttachment(att, "/PATH/TO/BE/SAVE/")
+	// Get channel samples
+	fmt.Println(m.ChannelNames())
+	samples, err := m.GetChannelSample(0, "ActlEngPrcntTorqueHighResolution")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(samples)
+	// Download attachments
+	att := m.GetAttachments()[0]
+	m.SaveAttachment(att, "/PATH/TO/BE/SAVE/")
 
-  // Read Change logs
-  m.ReadChangeLog()
+	// Read Change logs
+	m.ReadChangeLog()
 }
+
 ```
 
 ## Features

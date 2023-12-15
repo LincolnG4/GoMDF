@@ -271,7 +271,7 @@ func loadDataType(dataType uint8, lenSize int) interface{} {
 }
 
 // GetAttachmemts iterates over all AT blocks and return to an array
-func (m *MF4) GetAttachmemts() []AT.AttFile {
+func (m *MF4) GetAttachments() []AT.AttFile {
 	return AT.Get(m.File, m.getFirstAttachment())
 }
 
