@@ -3,7 +3,6 @@ package mf4
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -209,7 +208,7 @@ func (m *MF4) GetChannelSample(dgName int, channelName string) ([]interface{}, e
 
 		return sample, nil
 	}
-	return nil, errors.New("channel doen't exist")
+	return nil, fmt.Errorf("channel %s doens't exist", channelName)
 }
 
 func readArrayBlock(file *os.File, addr int64) {
@@ -362,7 +361,7 @@ func (m *MF4) getTimeFlag() uint8 {
 	return m.Header.Data.TimeFlags
 }
 
-func (m *MF4) geStartTimeNs() uint64 {
+func (m *MF4) getStartTimeNs() uint64 {
 	return m.Header.Data.StartTimeNs
 }
 
@@ -408,16 +407,16 @@ func (m *MF4) ReadChangeLog() {
 }
 
 // StartTimeNs returns the start timestamp of measurement in nanoseconds
-func (m *MF4) StartTimeNs() int64 {
-	t := m.geStartTimeNs()
+func (m *MF4) GetStartTimeNs() int64 {
+	t := m.getStartTimeNs()
 	tzo := uint64(m.getHDTimezoneOffsetMin())
 	dlo := uint64(m.getDaylightOffsetMin())
 	tf := m.getTimeFlag()
 	return m.GetTimeNs(t, tzo, dlo, tf)
 }
 
-func (m *MF4) StartTimeLT() time.Time {
-	return m.formatTimeLT(m.StartTimeNs())
+func (m *MF4) GetStartTimeLT() time.Time {
+	return m.formatTimeLT(m.GetStartTimeNs())
 }
 
 func (m *MF4) getFileHistory() int64 {
