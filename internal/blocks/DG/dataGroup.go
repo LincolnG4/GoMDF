@@ -89,17 +89,13 @@ func New(file *os.File, startAdress int64) *Block {
 
 }
 
-func (b *Block) BlankBlock() *Block {
-	return &Block{
-		Header: blocks.Header{
-			ID:        [4]byte{'#', '#', 'D', 'G'},
-			Reserved:  [4]byte{},
-			Length:    blocks.DgblockSize,
-			LinkCount: 4,
-		},
-		Link: Link{},
-		Data: Data{},
-	}
+// IsSorted checks if is Sorted `True`. Else `False` if it is Unsorted
+func (b *Block) IsSorted() bool {
+	return b.GetRecordID() == 0
+}
+
+func (b *Block) GetRecordID() uint8 {
+	return b.Data.RecIDSize
 }
 
 func (b *Block) MetadataComment() int64 {
@@ -112,4 +108,17 @@ func (b *Block) FirstChannelGroup() int64 {
 
 func (b *Block) Next() int64 {
 	return b.Link.Next
+}
+
+func (b *Block) BlankBlock() *Block {
+	return &Block{
+		Header: blocks.Header{
+			ID:        [4]byte{'#', '#', 'D', 'G'},
+			Reserved:  [4]byte{},
+			Length:    blocks.DgblockSize,
+			LinkCount: 4,
+		},
+		Link: Link{},
+		Data: Data{},
+	}
 }
