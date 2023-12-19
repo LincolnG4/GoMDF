@@ -172,7 +172,7 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 	}
 
 	dtype := loadDataType(dataType, len(data))
-	fmt.Println("Valid", cn.Data.Flags&1)
+
 	// Create a new instance of the data type using reflection
 	sliceElemType := reflect.TypeOf(dtype)
 	sliceElem := reflect.New(sliceElemType).Interface()

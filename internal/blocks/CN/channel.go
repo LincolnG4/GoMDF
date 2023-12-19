@@ -160,7 +160,7 @@ func (b *Block) GetSignalData(file *os.File, startAdress uint64, recordsize uint
 func (b *Block) IsAllValuesInvalid() bool {
 	// Bit 0 corresponds to the "all values invalid" flag
 	// Check if bit 0 is set
-	return b.Data.Flags&1 != 0
+	return blocks.IsBitSet(int(b.Data.Flags), 0)
 }
 
 func (b *Block) GetChannelName(f *os.File) string {
