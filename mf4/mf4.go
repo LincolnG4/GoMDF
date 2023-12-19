@@ -3,7 +3,6 @@ package mf4
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -36,7 +35,7 @@ type MF4 struct {
 type ChannelGroup struct {
 	Block     *CG.Block
 	Channels  map[string]*CN.Block
-	Datagroup *DG.Block
+	DataGroup *DG.Block
 }
 
 func ReadFile(file *os.File, getXML bool) (*MF4, error) {
@@ -59,24 +58,6 @@ func ReadFile(file *os.File, getXML bool) (*MF4, error) {
 	return &mf4File, nil
 }
 
-func (m *MF4) loadEvents() {
-	if m.getFirstEvent() != 0 {
-		nextEvent := m.getFirstEvent()
-		for nextEvent != 0 {
-			event, err := EV.New(m.File, m.MdfVersion(), nextEvent)
-			if err != nil {
-				fmt.Println(err)
-			}
-			nextEvent = event.Next()
-		}
-
-	}
-}
-
-func (m *MF4) loadHeader() {
-	m.Header = HD.New(m.File, blocks.IdblockSize)
-}
-
 func (m *MF4) read(getXML bool) {
 	var file *os.File = m.File
 
@@ -85,22 +66,22 @@ func (m *MF4) read(getXML bool) {
 	}
 
 	version := m.MdfVersion()
-	NextAddressDG := m.firstDataGroup()
-	for NextAddressDG != 0 {
-		dgBlock := DG.New(file, NextAddressDG)
-		mdCommentAddr := dgBlock.MetadataComment()
+	nextDataGroupAddress := m.firstDataGroup()
+	for nextDataGroupAddress != 0 {
+		dataGroupBlock := DG.New(file, nextDataGroupAddress)
+		mdCommentAddr := dataGroupBlock.MetadataComment()
 		if mdCommentAddr != 0 {
 			comment := MD.New(file, mdCommentAddr)
 			fmt.Printf("%s\n", comment)
 		}
 
-		NextAddressCG := dgBlock.FirstChannelGroup()
-		for NextAddressCG != 0 {
-			cgBlock := CG.New(file, version, NextAddressCG)
+		nextAddressCG := dataGroupBlock.FirstChannelGroup()
+		for nextAddressCG != 0 {
+			cgBlock := CG.New(file, version, nextAddressCG)
 			channelGroup := &ChannelGroup{
 				Block:     cgBlock,
 				Channels:  make(map[string]*CN.Block),
-				Datagroup: dgBlock,
+				DataGroup: dataGroupBlock,
 			}
 
 			nextAddressCN := cgBlock.FirstChannel()
@@ -108,9 +89,9 @@ func (m *MF4) read(getXML bool) {
 				cnBlock := CN.New(file, version, nextAddressCN)
 				channelName := cnBlock.GetChannelName(m.File)
 				channelGroup.Channels[channelName] = cnBlock
-				MdCommentAdress := cnBlock.GetCommentMd()
-				if getXML && MdCommentAdress != 0 {
-					comment := MD.New(file, MdCommentAdress)
+				mdCommentAdress := cnBlock.GetCommentMd()
+				if getXML && mdCommentAdress != 0 {
+					comment := MD.New(file, mdCommentAdress)
 					fmt.Println(comment)
 				} else {
 					mdBlock := (&MD.Block{}).BlankBlock()
@@ -120,10 +101,10 @@ func (m *MF4) read(getXML bool) {
 				nextAddressCN = cnBlock.Next()
 			}
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
-			NextAddressCG = cgBlock.Next()
+			nextAddressCG = cgBlock.Next()
 		}
 		fmt.Println("\n##############################")
-		NextAddressDG = dgBlock.Next()
+		nextDataGroupAddress = dataGroupBlock.Next()
 	}
 }
 
@@ -147,127 +128,95 @@ func (m *MF4) ChannelNames() map[int][]string {
 }
 
 // GetChannelSample loads sample by DataGroupName and ChannelName
-func (m *MF4) GetChannelSample(dgName int, channelName string) ([]interface{}, error) {
+func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interface{}, error) {
 	var byteOrder binary.ByteOrder
 	file := m.File
+	cgrp := m.ChannelGroup[indexDataGroup]
 
-	//for each Channel Group, read channel
-	for i, cgrp := range m.ChannelGroup {
-		if i != dgName {
-			continue
-		}
-		cn, ok := cgrp.Channels[channelName]
-		if !ok {
-			continue
-		}
-		dg := cgrp.Datagroup
-		cg := cgrp.Block
-
-		//Get channel with compositon Structure or Array
-		comp := cn.Link.Composition
-		if comp != 0 {
-			id := make([]byte, 4)
-			seekRead(file, comp, id)
-
-			if string(id) == blocks.CaID {
-				readArrayBlock(file, comp)
-			}
-		}
-
-		dataType := cn.Data.DataType
-
-		readAddr := int64(blocks.HeaderSize) + dg.Link.Data + int64(dg.Data.RecIDSize) + int64(cn.Data.ByteOffset)
-		size := (cn.Data.BitCount + uint32(cn.Data.BitOffset)) / 8
-		data := make([]byte, size)
-		sample := make([]interface{}, 0)
-
-		rowSize := int64(cg.Data.DataBytes)
-
-		if dataType == 0 || dataType == 2 || dataType == 4 || dataType == 8 || dataType == 15 {
-			byteOrder = binary.LittleEndian
-		} else {
-			byteOrder = binary.BigEndian
-		}
-
-		dtype := loadDataType(dataType, len(data))
-
-		// Create a new instance of the data type using reflection
-		sliceElemType := reflect.TypeOf(dtype)
-		sliceElem := reflect.New(sliceElemType).Interface()
-
-		for i := uint64(0); i < cg.Data.CycleCount; i += 1 {
-			seekRead(file, readAddr, data)
-
-			buf := bytes.NewBuffer(data)
-			err := binary.Read(buf, byteOrder, sliceElem)
-			if err != nil {
-				return nil, fmt.Errorf("error during parsing channel: %s ", err)
-			}
-			sample = append(sample, reflect.ValueOf(sliceElem).Elem().Interface())
-			readAddr += rowSize
-		}
-
-		return sample, nil
+	// Does channel exist in datagroup?
+	cn, ok := cgrp.Channels[channelName]
+	if !ok {
+		return nil, fmt.Errorf("channel %s doens't exist", channelName)
 	}
-	return nil, errors.New("channel doen't exist")
+
+	dg := cgrp.DataGroup
+	cg := cgrp.Block
+
+	//Get channel with compositon Structure or Array
+	comp := cn.Link.Composition
+	if comp != 0 {
+		id := make([]byte, 4)
+		seekRead(file, comp, id)
+
+		if string(id) == blocks.CaID {
+			readArrayBlock(file, comp)
+		}
+	}
+
+	if cn.IsAllValuesInvalid() {
+		return nil, fmt.Errorf("channel %s has invalid read", channelName)
+	}
+
+	dataType := cn.Data.DataType
+	readAddr := int64(blocks.HeaderSize) + dg.Link.Data + int64(dg.GetRecordID()) + int64(cn.Data.ByteOffset)
+	size := (cn.Data.BitCount + uint32(cn.Data.BitOffset)) / 8
+	data := make([]byte, size)
+	sample := make([]interface{}, 0)
+
+	rowSize := int64(cg.Data.DataBytes)
+
+	if dataType == 0 || dataType == 2 || dataType == 4 || dataType == 8 || dataType == 15 {
+		byteOrder = binary.LittleEndian
+	} else {
+		byteOrder = binary.BigEndian
+	}
+
+	dtype := loadDataType(dataType, len(data))
+
+	// Create a new instance of the data type using reflection
+	sliceElemType := reflect.TypeOf(dtype)
+	sliceElem := reflect.New(sliceElemType).Interface()
+
+	for i := uint64(0); i < cg.Data.CycleCount; i += 1 {
+		seekRead(file, readAddr, data)
+		buf := bytes.NewBuffer(data)
+		err := binary.Read(buf, byteOrder, sliceElem)
+		if err != nil {
+			return nil, fmt.Errorf("error during parsing channel: %s ", err)
+		}
+		sample = append(sample, reflect.ValueOf(sliceElem).Elem().Interface())
+		readAddr += rowSize
+	}
+
+	return sample, nil
+}
+
+// loadEvents loads and processes events from the given MF4 instance.
+// Events are represented by EVBLOCK structures, providing synchronization details.
+// The function iterates through the linked list of events, creating EV instances
+// and handling event details such as names, comments, and scopes.
+// If errors occur during EV instance creation, they are printed to the console.
+//
+// Parameters:
+//
+//	m: A pointer to the MF4 instance containing events.
+func (m *MF4) loadEvents() {
+	if m.getFirstEvent() == 0 {
+		return
+	}
+
+	nextEvent := m.getFirstEvent()
+	for nextEvent != 0 {
+		event, err := EV.New(m.File, m.MdfVersion(), nextEvent)
+		if err != nil {
+			fmt.Println(err)
+		}
+		nextEvent = event.Next()
+	}
 }
 
 func readArrayBlock(file *os.File, addr int64) {
 	//debug(file,addr,400)
-}
-
-func seekRead(file *os.File, readAddr int64, data []byte) {
-	_, errs := file.Seek(readAddr, 0)
-	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "Memory Addr out of size")
-		}
-	}
-	_, err := file.Read(data)
-	if err != nil {
-		if err != io.EOF {
-			fmt.Println("LoadBuffer error: ", err)
-		}
-	}
-}
-
-func loadDataType(dataType uint8, lenSize int) interface{} {
-	var dtype interface{}
-	switch dataType {
-	case 0, 1:
-		switch lenSize {
-		case 1:
-			dtype = uint8(0)
-		case 2:
-			dtype = uint16(0)
-		case 4:
-			dtype = uint32(0)
-		case 8:
-			dtype = uint64(0)
-		}
-	case 2, 3:
-		switch lenSize {
-		case 1:
-			dtype = int8(0)
-		case 2:
-			dtype = int16(0)
-		case 4:
-			dtype = int32(0)
-		case 8:
-			dtype = int64(0)
-		}
-
-	case 4, 5:
-		switch lenSize {
-		case 4:
-			dtype = float32(0)
-		case 8:
-			dtype = float64(0)
-
-		}
-
-	}
-	return dtype
 }
 
 // GetAttachmemts iterates over all AT blocks and return to an array
@@ -354,6 +303,58 @@ func (m *MF4) StartDistanceM() (float64, error) {
 	}
 	return m.getStartDistanceM(), nil
 }
+
+func (m *MF4) GetMeasureComment() string {
+	if m.getHeaderMdComment() == 0 {
+		return ""
+	}
+	return TX.GetText(m.File, m.getHeaderMdComment())
+}
+
+// ReadChangeLog reads and prints the change log entries from the MF4 file.
+// The change log is stored in FHBLOCK structures, each representing a change made to the MDF file.
+// The function iterates through the linked list of FHBLOCKs starting from the first one referenced
+// by the HDBLOCK, printing the chronological change history.
+//
+// Parameters:
+//
+//	m: A pointer to the MF4 instance containing the file change log.
+func (m *MF4) ReadChangeLog() {
+	nextAddressFH := m.getFileHistory()
+	for nextAddressFH != 0 {
+		fhBlock := FH.New(m.File, nextAddressFH)
+		c := fhBlock.GetChangeLog(m.File)
+		t := fhBlock.GetTimeNs()
+		f := fhBlock.GetTimeFlag()
+
+		fmt.Println(m.formatLog(t, f, c))
+
+		nextAddressFH = fhBlock.Next()
+	}
+}
+
+// StartTimeNs returns the start timestamp of measurement in nanoseconds
+func (m *MF4) GetStartTimeNs() int64 {
+	t := m.getStartTimeNs()
+	tzo := uint64(m.getHDTimezoneOffsetMin())
+	dlo := uint64(m.getDaylightOffsetMin())
+	tf := m.getTimeFlag()
+	return m.GetTimeNs(t, tzo, dlo, tf)
+}
+
+func (m *MF4) GetStartTimeLT() time.Time {
+	return m.formatTimeLT(m.GetStartTimeNs())
+}
+
+func (m *MF4) getFileHistory() int64 {
+	return m.FileHistory
+}
+
+func (m *MF4) formatLog(t int64, f uint8, c string) string {
+	ts := m.formatTimeLT(t)
+	return fmt.Sprint(ts, c)
+}
+
 func (m *MF4) getHDTimezoneOffsetMin() int16 {
 	return m.Header.Data.TZOffsetMin
 }
@@ -362,7 +363,7 @@ func (m *MF4) getTimeFlag() uint8 {
 	return m.Header.Data.TimeFlags
 }
 
-func (m *MF4) geStartTimeNs() uint64 {
+func (m *MF4) getStartTimeNs() uint64 {
 	return m.Header.Data.StartTimeNs
 }
 
@@ -382,49 +383,63 @@ func (m *MF4) getTimeClass() uint8 {
 	return m.Header.Data.TimeClass
 }
 
-func (m *MF4) GetMeasureComment() string {
-	if m.getHeaderMdComment() == 0 {
-		return ""
-	}
-	return TX.GetText(m.File, m.getHeaderMdComment())
+func (m *MF4) loadHeader() {
+	m.Header = HD.New(m.File, blocks.IdblockSize)
 }
 
 func (m *MF4) getHeaderMdComment() int64 {
 	return m.Header.Link.MdComment
 }
-
-func (m *MF4) ReadChangeLog() {
-	nextAddressFH := m.getFileHistory()
-	for nextAddressFH != 0 {
-		fhBlock := FH.New(m.File, nextAddressFH)
-		c := fhBlock.GetChangeLog(m.File)
-		t := fhBlock.GetTimeNs()
-		f := fhBlock.GetTimeFlag()
-
-		fmt.Println(m.formatLog(t, f, c))
-
-		nextAddressFH = fhBlock.Next()
+func seekRead(file *os.File, readAddr int64, data []byte) {
+	_, errs := file.Seek(readAddr, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "Memory Addr out of size")
+		}
+	}
+	_, err := file.Read(data)
+	if err != nil {
+		if err != io.EOF {
+			fmt.Println("LoadBuffer error: ", err)
+		}
 	}
 }
 
-// StartTimeNs returns the start timestamp of measurement in nanoseconds
-func (m *MF4) StartTimeNs() int64 {
-	t := m.geStartTimeNs()
-	tzo := uint64(m.getHDTimezoneOffsetMin())
-	dlo := uint64(m.getDaylightOffsetMin())
-	tf := m.getTimeFlag()
-	return m.GetTimeNs(t, tzo, dlo, tf)
-}
+func loadDataType(dataType uint8, lenSize int) interface{} {
+	var dtype interface{}
+	switch dataType {
+	case 0, 1:
+		switch lenSize {
+		case 1:
+			dtype = uint8(0)
+		case 2:
+			dtype = uint16(0)
+		case 4:
+			dtype = uint32(0)
+		case 8:
+			dtype = uint64(0)
+		}
+	case 2, 3:
+		switch lenSize {
+		case 1:
+			dtype = int8(0)
+		case 2:
+			dtype = int16(0)
+		case 4:
+			dtype = int32(0)
+		case 8:
+			dtype = int64(0)
+		}
 
-func (m *MF4) StartTimeLT() time.Time {
-	return m.formatTimeLT(m.StartTimeNs())
-}
+	case 4, 5:
+		switch lenSize {
+		case 4:
+			dtype = float32(0)
+		case 8:
+			dtype = float64(0)
 
-func (m *MF4) getFileHistory() int64 {
-	return m.FileHistory
-}
+		}
 
-func (m *MF4) formatLog(t int64, f uint8, c string) string {
-	ts := m.formatTimeLT(t)
-	return fmt.Sprint(ts, c)
+	}
+	return dtype
 }

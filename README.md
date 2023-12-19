@@ -1,4 +1,4 @@
-# GoMDF
+# GoMDF - Read and Write ASAM MDF FILES
 Go package for reading ASAM MDF files.
 
 ## Installation

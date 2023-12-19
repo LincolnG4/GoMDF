@@ -127,6 +127,54 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 }
 
+func (b *Block) getFlag() uint16 {
+	return b.Data.Flags
+}
+
+func (b *Block) IsVLSD() bool {
+	return blocks.IsBitSet(int(b.getFlag()), 0)
+}
+
+func (b *Block) Type(version uint16) []string {
+	t := []string{}
+	f := int(b.Data.Flags)
+
+	if b.IsVLSD() {
+		t = append(t, "VLSD")
+	}
+
+	if version < 410 {
+		return t
+	}
+
+	//BUS EVENT FLAG
+	if blocks.IsBitSet(f, 1) && blocks.IsBitSet(f, 2) {
+		t = append(t, "PLAIN_BUS_EVENT")
+	} else if blocks.IsBitSet(f, 1) {
+		t = append(t, "BUS_EVENT")
+	}
+
+	if version < 420 {
+		return t
+	}
+
+	//REMOTE MASTER
+	if blocks.IsBitSet(f, 3) {
+		t = append(t, "REMOTE_MASTER")
+	}
+
+	//EVENT
+	if blocks.IsBitSet(f, 4) {
+		t = append(t, "EVENT")
+	}
+
+	return t
+}
+
+func (b *Block) PathSeparator() string {
+	return string(rune(b.Data.PathSeparator))
+}
+
 func (b *Block) BlankBlock() *Block {
 	return &Block{
 		Header: blocks.Header{
