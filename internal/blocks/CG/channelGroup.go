@@ -105,7 +105,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		MdComment:   linkFields[5],
 	}
 
-	if version >= 420 {
+	if version >= blocks.Version420 {
 		linkFields = append(linkFields, blocks.ReadInt64FromBinary(file))
 		b.Link.CgMaster = linkFields[6]
 	}
@@ -124,7 +124,6 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	fmt.Printf("%+v\n", b.Data)
 
 	return &b
-
 }
 
 func (b *Block) getFlag() uint16 {
@@ -140,18 +139,18 @@ func (b *Block) Type(version uint16) []string {
 	f := int(b.Data.Flags)
 
 	if b.IsVLSD() {
-		t = append(t, "VLSD")
+		t = append(t, blocks.VlsdEvent)
 	}
 
-	if version < 410 {
+	if version < blocks.Version410 {
 		return t
 	}
 
 	//BUS EVENT FLAG
 	if blocks.IsBitSet(f, 1) && blocks.IsBitSet(f, 2) {
-		t = append(t, "PLAIN_BUS_EVENT")
+		t = append(t, blocks.PlainBusEvent)
 	} else if blocks.IsBitSet(f, 1) {
-		t = append(t, "BUS_EVENT")
+		t = append(t, blocks.BusEvent)
 	}
 
 	if version < 420 {
@@ -160,12 +159,12 @@ func (b *Block) Type(version uint16) []string {
 
 	//REMOTE MASTER
 	if blocks.IsBitSet(f, 3) {
-		t = append(t, "REMOTE_MASTER")
+		t = append(t, blocks.RemoteMaster)
 	}
 
 	//EVENT
 	if blocks.IsBitSet(f, 4) {
-		t = append(t, "EVENT")
+		t = append(t, blocks.Event)
 	}
 
 	return t

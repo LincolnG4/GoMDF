@@ -19,6 +19,7 @@ import (
 	"github.com/LincolnG4/GoMDF/internal/blocks/HD"
 	"github.com/LincolnG4/GoMDF/internal/blocks/ID"
 	"github.com/LincolnG4/GoMDF/internal/blocks/MD"
+	"github.com/LincolnG4/GoMDF/internal/blocks/SI"
 	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
 	"github.com/davecgh/go-spew/spew"
 )
@@ -33,9 +34,10 @@ type MF4 struct {
 }
 
 type ChannelGroup struct {
-	Block     *CG.Block
-	Channels  map[string]*CN.Block
-	DataGroup *DG.Block
+	Block      *CG.Block
+	Channels   map[string]*CN.Block
+	DataGroup  *DG.Block
+	SourceInfo SI.SourceInfo
 }
 
 func ReadFile(file *os.File, getXML bool) (*MF4, error) {
@@ -52,7 +54,7 @@ func ReadFile(file *os.File, getXML bool) (*MF4, error) {
 	if fileVersion >= 400 {
 		mf4File.loadHeader()
 		mf4File.loadFirstFileHistory()
-		mf4File.loadEvents()
+		//mf4File.loadEvents()
 		mf4File.read(getXML)
 	}
 	return &mf4File, nil
@@ -78,11 +80,14 @@ func (m *MF4) read(getXML bool) {
 		nextAddressCG := dataGroupBlock.FirstChannelGroup()
 		for nextAddressCG != 0 {
 			cgBlock := CG.New(file, version, nextAddressCG)
+
 			channelGroup := &ChannelGroup{
-				Block:     cgBlock,
-				Channels:  make(map[string]*CN.Block),
-				DataGroup: dataGroupBlock,
+				Block:      cgBlock,
+				Channels:   make(map[string]*CN.Block),
+				DataGroup:  dataGroupBlock,
+				SourceInfo: SI.GetSourceInfo(file, version, cgBlock.Link.SiAcqSource),
 			}
+			fmt.Printf("%+v", channelGroup)
 
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
