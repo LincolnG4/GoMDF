@@ -64,6 +64,46 @@ func GetText(file *os.File, startAdress int64, bufSize []byte, decode bool) []by
 	return []byte{}
 }
 
+func SplitIdToArray(inputString string) [4]byte {
+	var byteArray [4]byte
+
+	for i, char := range inputString {
+		byteArray[i] = byte(char)
+	}
+	return byteArray
+}
+
+func GetHeader(file *os.File, startAdress int64, blockID string) (Header, error) {
+	var blockSize uint64 = HeaderSize
+
+	head := Header{}
+
+	_, errs := file.Seek(startAdress, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "Memory Addr out of size")
+		}
+	}
+
+	//Create a buffer based on blocksize
+	buf := LoadBuffer(file, blockSize)
+
+	//Read header
+	BinaryError := binary.Read(buf, binary.LittleEndian, &head)
+	if BinaryError != nil {
+		return Header{}, fmt.Errorf("invalid block")
+	}
+
+	if string(head.ID[:]) != blockID {
+		return Header{}, fmt.Errorf("invalid block id")
+	}
+
+	fmt.Printf("\n%s\n", head.ID)
+	fmt.Printf("%+v\n", head)
+
+	return head, nil
+}
+
 func CalculateLinkSize(linkCount uint64) uint64 {
 	return linkCount * uint64(LinkSize)
 }

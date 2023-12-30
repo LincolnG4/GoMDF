@@ -1,4 +1,4 @@
-package HD
+package SR
 
 import (
 	"encoding/binary"
@@ -15,39 +15,31 @@ type Block struct {
 }
 
 type Link struct {
-	DgFirst   int64
-	FhFirst   int64
-	ChFirst   int64
-	AtFirst   int64
-	EvFirst   int64
-	MdComment int64
+	//Pointer to next SRBLOCK
+	Next int64
+
+	//Pointer to sample reduction records or data list block
+	Data int64
 }
 
 type Data struct {
-	StartTimeNs   uint64
-	TZOffsetMin   int16
-	DSTOffsetMin  int16
-	TimeFlags     uint8
-	TimeClass     uint8
-	Flags         uint8
-	Reserved      uint8
-	StartAngleRad float64
-	StartDistM    float64
+	//Number of cycles
+	CycleCount uint64
+
+	//Length of sample interval
+	Interval float64
+	SyncType uint8
+	Flags    uint8
+	Reserved [6]byte
 }
 
-const blockID string = blocks.HdID
-
-// New() seek and read to Block struct based on startAddress and blockSize.
-//
-// The HDBLOCK always begins at file position 64. It contains general information about the
-// contents of the measured data file and is the root for the block hierarchy.
-func New(file *os.File, startAdress int64) *Block {
+func New(file *os.File, version uint16, startAdress int64) *Block {
 	var b Block
 	var err error
 
 	b.Header = blocks.Header{}
 
-	b.Header, err = blocks.GetHeader(file, startAdress, blocks.HdID)
+	b.Header, err = blocks.GetHeader(file, startAdress, blocks.SrID)
 	if err != nil {
 		return b.BlankBlock()
 	}
@@ -84,12 +76,12 @@ func New(file *os.File, startAdress int64) *Block {
 func (b *Block) BlankBlock() *Block {
 	return &Block{
 		Header: blocks.Header{
-			ID:        blocks.SplitIdToArray(blocks.HdID),
-			Length:    blocks.HdblockSize,
-			LinkCount: 6,
+			ID:        blocks.SplitIdToArray(blocks.SrID),
+			Reserved:  [4]byte{},
+			Length:    blocks.FhblockSize,
+			LinkCount: 2,
 		},
 		Link: Link{},
 		Data: Data{},
 	}
-
 }

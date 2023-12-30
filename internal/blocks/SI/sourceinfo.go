@@ -3,7 +3,6 @@ package SI
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
@@ -47,43 +46,23 @@ type SourceInfo struct {
 }
 
 func New(file *os.File, version uint16, startAdress int64) *Block {
-	var blockSize uint64 = blocks.HeaderSize
 	var b Block
+	var err error
 
 	b.Header = blocks.Header{}
 
-	_, errs := file.Seek(startAdress, 0)
-	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "Memory Addr out of size")
-		}
-	}
-
-	//Create a buffer based on blocksize
-	buf := blocks.LoadBuffer(file, blockSize)
-
-	//Read header
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
-		b.BlankBlock()
-	}
-
-	if string(b.Header.ID[:]) != blocks.SiID {
-		fmt.Printf("ERROR NOT %s", blocks.SiID)
+	b.Header, err = blocks.GetHeader(file, startAdress, blocks.SiID)
+	if err != nil {
 		return b.BlankBlock()
 	}
 
-	fmt.Printf("\n%s\n", b.Header.ID)
-	fmt.Printf("%+v\n", b.Header)
-
 	//Calculates size of Link Block
-	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
+	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
 	b.Link = Link{}
-	buf = blocks.LoadBuffer(file, blockSize)
+	buf := blocks.LoadBuffer(file, blockSize)
 
 	//Create a buffer based on blocksize
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Link)
+	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 	}
@@ -167,7 +146,7 @@ func (b *Block) GetType() string {
 	return blocks.SourceTypeMap[i]
 }
 
-// GetType returns classification of used bus
+// GetBusType returns classification of used bus
 // (should be "NONE" for si_type ≥ 3)
 //
 // - NONE: no bus
@@ -221,7 +200,7 @@ func (b *Block) GetFlag() string {
 func (b *Block) BlankBlock() *Block {
 	return &Block{
 		Header: blocks.Header{
-			ID:        [4]byte{'#', '#', 'S', 'I'},
+			ID:        blocks.SplitIdToArray(blocks.SiID),
 			Reserved:  [4]byte{},
 			Length:    blocks.FhblockSize,
 			LinkCount: 2,

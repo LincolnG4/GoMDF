@@ -64,38 +64,21 @@ type AttFile struct {
 
 func New(file *os.File, startAdress int64) *Block {
 	var b Block
-	var blockSize uint64 = blocks.HeaderSize
-	b.Address = startAdress
-
-	_, errs := file.Seek(startAdress, 0)
-	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "Memory Addr out of size")
-		}
-	}
+	var err error
 
 	b.Header = blocks.Header{}
-	//Create a buffer based on blocksize
-	buf := blocks.LoadBuffer(file, blockSize)
-	//Read header
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
-		b.BlankBlock()
+
+	b.Header, err = blocks.GetHeader(file, startAdress, blocks.AtID)
+	if err != nil {
+		return b.BlankBlock()
 	}
 
-	if string(b.Header.ID[:]) != blocks.AtID {
-		fmt.Printf("ERROR NOT %s", blocks.AtID)
-	}
-
-	fmt.Printf("\n%s\n", b.Header.ID)
-	fmt.Printf("%+v\n", b.Header)
 	//Calculates size of Link Block
-	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
+	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
 	b.Link = Link{}
-	buf = blocks.LoadBuffer(file, blockSize)
+	buf := blocks.LoadBuffer(file, blockSize)
 	//Create a buffer based on blocksize
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Link)
+	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 	}
@@ -314,7 +297,7 @@ func (b *Block) GetMdComment() int64 {
 func (b *Block) BlankBlock() *Block {
 	return &Block{
 		Header: blocks.Header{
-			ID:        [4]byte{'#', '#', 'A', 'T'},
+			ID:        blocks.SplitIdToArray(blocks.AtID),
 			Reserved:  [4]byte{},
 			Length:    blocks.AtblockSize,
 			LinkCount: 2,
