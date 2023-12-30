@@ -29,8 +29,6 @@ type Data struct {
 	Reserved     [3]byte
 }
 
-const blockID string = blocks.FhID
-
 func New(file *os.File, startAdress int64) *Block {
 	var blockSize uint64 = blocks.HeaderSize
 	var b Block
@@ -55,8 +53,8 @@ func New(file *os.File, startAdress int64) *Block {
 		b.BlankBlock()
 	}
 
-	if string(b.Header.ID[:]) != blockID {
-		fmt.Printf("ERROR NOT %s", blockID)
+	if string(b.Header.ID[:]) != blocks.FhID {
+		fmt.Printf("ERROR NOT %s", blocks.FhID)
 	}
 
 	fmt.Printf("\n%s\n", b.Header.ID)

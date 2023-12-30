@@ -39,6 +39,7 @@ func GetText(file *os.File, startAdress int64) string {
 	}
 	if string(b.Header.ID[:]) != blocks.TxID && string(b.Header.ID[:]) != blocks.MdID {
 		fmt.Printf("ERROR NOT %s or %s", blocks.TxID, blocks.MdID)
+		return ""
 	}
 
 	blockSize = b.Header.Length - blockSize
