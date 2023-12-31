@@ -25,7 +25,7 @@ func main() {
 		panic(err)
 	}
 
-	m, err := mf4.ReadFile(file, false)
+	m, err := mf4.ReadFile(file)
 	if err != nil {
 		panic(err)
 	}

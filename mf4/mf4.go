@@ -40,7 +40,7 @@ type ChannelGroup struct {
 	SourceInfo SI.SourceInfo
 }
 
-func ReadFile(file *os.File, getXML bool) (*MF4, error) {
+func ReadFile(file *os.File) (*MF4, error) {
 	var address int64 = 0
 	mf4File := MF4{
 		File:           file,
@@ -54,13 +54,13 @@ func ReadFile(file *os.File, getXML bool) (*MF4, error) {
 	if fileVersion >= 400 {
 		mf4File.loadHeader()
 		mf4File.loadFirstFileHistory()
-		//mf4File.loadEvents()
-		mf4File.read(getXML)
+		mf4File.loadEvents()
+		mf4File.read()
 	}
 	return &mf4File, nil
 }
 
-func (m *MF4) read(getXML bool) {
+func (m *MF4) read() {
 	var file *os.File = m.File
 
 	if !m.IsFinalized() {
@@ -85,9 +85,8 @@ func (m *MF4) read(getXML bool) {
 				Block:      cgBlock,
 				Channels:   make(map[string]*CN.Block),
 				DataGroup:  dataGroupBlock,
-				SourceInfo: SI.GetSourceInfo(file, version, cgBlock.Link.SiAcqSource),
+				SourceInfo: SI.Get(file, version, cgBlock.Link.SiAcqSource),
 			}
-			fmt.Printf("%+v", channelGroup)
 
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
@@ -95,7 +94,7 @@ func (m *MF4) read(getXML bool) {
 				channelName := cnBlock.GetChannelName(m.File)
 				channelGroup.Channels[channelName] = cnBlock
 				mdCommentAdress := cnBlock.GetCommentMd()
-				if getXML && mdCommentAdress != 0 {
+				if mdCommentAdress != 0 {
 					comment := MD.New(file, mdCommentAdress)
 					fmt.Println(comment)
 				} else {

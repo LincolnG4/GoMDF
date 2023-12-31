@@ -3,7 +3,6 @@ package SI
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
@@ -47,43 +46,23 @@ type SourceInfo struct {
 }
 
 func New(file *os.File, version uint16, startAdress int64) *Block {
-	var blockSize uint64 = blocks.HeaderSize
 	var b Block
+	var err error
 
 	b.Header = blocks.Header{}
 
-	_, errs := file.Seek(startAdress, 0)
-	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "Memory Addr out of size")
-		}
-	}
-
-	//Create a buffer based on blocksize
-	buf := blocks.LoadBuffer(file, blockSize)
-
-	//Read header
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
-		b.BlankBlock()
-	}
-
-	if string(b.Header.ID[:]) != blocks.SiID {
-		fmt.Printf("ERROR NOT %s", blocks.SiID)
+	b.Header, err = blocks.GetHeader(file, startAdress, blocks.SiID)
+	if err != nil {
 		return b.BlankBlock()
 	}
 
-	fmt.Printf("\n%s\n", b.Header.ID)
-	fmt.Printf("%+v\n", b.Header)
-
 	//Calculates size of Link Block
-	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
+	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
 	b.Link = Link{}
-	buf = blocks.LoadBuffer(file, blockSize)
+	buf := blocks.LoadBuffer(file, blockSize)
 
 	//Create a buffer based on blocksize
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Link)
+	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 	}
@@ -108,36 +87,36 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 // GetPath returns human readable string containing additional
 // information about the source
-func (b *Block) GetPath(file *os.File) string {
+func (b *Block) Path(file *os.File) string {
 	if b.Link.TxPath == 0 {
 		return ""
 	}
 	return TX.GetText(file, b.Link.TxPath)
 }
 
-func (b *Block) GetName(file *os.File) string {
+func (b *Block) Name(file *os.File) string {
 	if b.Link.TxName == 0 {
 		return ""
 	}
 	return TX.GetText(file, b.Link.TxName)
 }
 
-func (b *Block) GetComment(file *os.File) string {
+func (b *Block) Comment(file *os.File) string {
 	if b.Link.TxName == 0 {
 		return ""
 	}
 	return TX.GetText(file, b.Link.TxName)
 }
 
-func GetSourceInfo(file *os.File, version uint16, address int64) SourceInfo {
+func Get(file *os.File, version uint16, address int64) SourceInfo {
 	b := New(file, version, address)
 	return SourceInfo{
-		Name:    b.GetName(file),
-		Path:    b.GetPath(file),
-		Comment: b.GetComment(file),
-		Type:    b.GetType(),
-		BusType: b.GetBusType(),
-		Flag:    b.GetFlag(),
+		Name:    b.Name(file),
+		Path:    b.Path(file),
+		Comment: b.Comment(file),
+		Type:    b.Type(),
+		BusType: b.BusType(),
+		Flag:    b.Flag(),
 	}
 }
 
@@ -158,7 +137,7 @@ func (b *Block) getDataType() uint8 {
 // - TOOL: software generated
 //
 // - USER: user interaction/input
-func (b *Block) GetType() string {
+func (b *Block) Type() string {
 	i := b.getDataType()
 	if i == 0 {
 		return ""
@@ -167,7 +146,7 @@ func (b *Block) GetType() string {
 	return blocks.SourceTypeMap[i]
 }
 
-// GetType returns classification of used bus
+// GetBusType returns classification of used bus
 // (should be "NONE" for si_type ≥ 3)
 //
 // - NONE: no bus
@@ -187,7 +166,7 @@ func (b *Block) GetType() string {
 // - ETHERNET,
 //
 // - USB
-func (b *Block) GetBusType() string {
+func (b *Block) BusType() string {
 	bt := b.Data.BusType
 	if b.getDataType() >= 3 {
 		return blocks.BusTypeMap[0]
@@ -201,7 +180,7 @@ func (b *Block) GetBusType() string {
 }
 
 // GetFlag returns if source is a simulation
-func (b *Block) GetFlag() string {
+func (b *Block) Flag() string {
 	f := int(b.Data.Flags)
 	if f == 0 {
 		return ""
@@ -221,7 +200,7 @@ func (b *Block) GetFlag() string {
 func (b *Block) BlankBlock() *Block {
 	return &Block{
 		Header: blocks.Header{
-			ID:        [4]byte{'#', '#', 'S', 'I'},
+			ID:        blocks.SplitIdToArray(blocks.SiID),
 			Reserved:  [4]byte{},
 			Length:    blocks.FhblockSize,
 			LinkCount: 2,

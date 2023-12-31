@@ -20,6 +20,7 @@ const (
 	HdID = "##HD"
 	MdID = "##MD"
 	SiID = "##SI"
+	SrID = "##SR"
 	TxID = "##TX"
 )
 

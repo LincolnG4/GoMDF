@@ -3,7 +3,6 @@ package CN
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
@@ -53,39 +52,19 @@ type Data struct {
 	LimitExtMax     float64
 }
 
-const blockID string = blocks.CnID
-
 func New(file *os.File, version uint16, startAdress int64) *Block {
-	var blockSize uint64 = blocks.HeaderSize
 	var b Block
+	var err error
 
 	b.Header = blocks.Header{}
 
-	_, errs := file.Seek(startAdress, 0)
-	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "Memory Addr out of size")
-		}
+	b.Header, err = blocks.GetHeader(file, startAdress, blocks.CnID)
+	if err != nil {
+		return b.BlankBlock()
 	}
 
-	//Create a buffer based on blocksize
-	buf := blocks.LoadBuffer(file, blockSize)
-
-	//Read header
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
-		b.BlankBlock()
-	}
-
-	if string(b.Header.ID[:]) != blockID {
-		fmt.Printf("ERROR NOT %s", blockID)
-	}
-
-	fmt.Printf("\n%s\n", b.Header.ID)
-	fmt.Printf("%+v\n", b.Header)
 	//Calculates size of Link Block
-	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
+	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
 	buffEach := make([]byte, blockSize)
 	// Read the Link section from the binary file
 	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
@@ -116,7 +95,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	fmt.Printf("%+v\n", b.Link)
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
-	buf = blocks.LoadBuffer(file, blockSize)
+	buf := blocks.LoadBuffer(file, blockSize)
 
 	// Create a buffer based on block size
 	if err := binary.Read(buf, binary.LittleEndian, &b.Data); err != nil {
@@ -143,7 +122,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 func (b *Block) BlankBlock() *Block {
 	return &Block{
 		Header: blocks.Header{
-			ID:        [4]byte{'#', '#', 'C', 'N'},
+			ID:        blocks.SplitIdToArray(blocks.CnID),
 			Reserved:  [4]byte{},
 			Length:    blocks.CnblockSize,
 			LinkCount: 0,
