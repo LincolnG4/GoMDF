@@ -21,14 +21,14 @@ func main() {
 
 	defer file.Close()
 
-	m, err := mf4.ReadFile(file, true)
+	m, err := mf4.ReadFile(file)
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	fmt.Println("Version ID --> ", m.MdfVersion())
-	fmt.Println("Start Time NS --> ", m.StartTimeNs())
-	fmt.Println("Start Start--> ", m.StartTimeLT())
+	fmt.Println("Start Time NS --> ", m.GetStartTimeNs())
+	fmt.Println("Start StartTimeLT --> ", m.GetStartTimeLT())
 
 	//Return all channels availables
 	channels := m.ChannelNames()
@@ -44,16 +44,23 @@ func main() {
 		}
 	}
 
-	value, err := m.GetChannelSample(0, "dwordCounter")
+	// Access metadata
+	fmt.Println(m.Version())
+	fmt.Println("Version ID --> ", m.MdfVersion())
+	fmt.Println("Start Time NS --> ", m.GetStartTimeNs())
+	fmt.Println("Start StartTimeLT --> ", m.GetStartTimeLT())
+
+	// Get channel samples
+	fmt.Println(m.ChannelNames())
+	samples, err := m.GetChannelSample(0, "Signal")
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Printf("\nChannel %s ==> Value %v", "Triangle", value)
-	//Extract embedded and compressed files from MF4
-	fa := m.GetAttachmemts()
-	fmt.Println(fa)
-	d := m.SaveAttachment(fa[1], "/SAVE/PATH/")
-	fmt.Println(d)
+	fmt.Println(samples)
+	// Download attachments
+	// att := m.GetAttachments()[0]
+	// m.SaveAttachment(att, "/PATH/TO/BE/SAVE/")
 
+	// Read Change logs
 	m.ReadChangeLog()
 }

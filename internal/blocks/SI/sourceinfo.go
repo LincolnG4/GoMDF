@@ -87,36 +87,36 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 // GetPath returns human readable string containing additional
 // information about the source
-func (b *Block) GetPath(file *os.File) string {
+func (b *Block) Path(file *os.File) string {
 	if b.Link.TxPath == 0 {
 		return ""
 	}
 	return TX.GetText(file, b.Link.TxPath)
 }
 
-func (b *Block) GetName(file *os.File) string {
+func (b *Block) Name(file *os.File) string {
 	if b.Link.TxName == 0 {
 		return ""
 	}
 	return TX.GetText(file, b.Link.TxName)
 }
 
-func (b *Block) GetComment(file *os.File) string {
+func (b *Block) Comment(file *os.File) string {
 	if b.Link.TxName == 0 {
 		return ""
 	}
 	return TX.GetText(file, b.Link.TxName)
 }
 
-func GetSourceInfo(file *os.File, version uint16, address int64) SourceInfo {
+func Get(file *os.File, version uint16, address int64) SourceInfo {
 	b := New(file, version, address)
 	return SourceInfo{
-		Name:    b.GetName(file),
-		Path:    b.GetPath(file),
-		Comment: b.GetComment(file),
-		Type:    b.GetType(),
-		BusType: b.GetBusType(),
-		Flag:    b.GetFlag(),
+		Name:    b.Name(file),
+		Path:    b.Path(file),
+		Comment: b.Comment(file),
+		Type:    b.Type(),
+		BusType: b.BusType(),
+		Flag:    b.Flag(),
 	}
 }
 
@@ -137,7 +137,7 @@ func (b *Block) getDataType() uint8 {
 // - TOOL: software generated
 //
 // - USER: user interaction/input
-func (b *Block) GetType() string {
+func (b *Block) Type() string {
 	i := b.getDataType()
 	if i == 0 {
 		return ""
@@ -166,7 +166,7 @@ func (b *Block) GetType() string {
 // - ETHERNET,
 //
 // - USB
-func (b *Block) GetBusType() string {
+func (b *Block) BusType() string {
 	bt := b.Data.BusType
 	if b.getDataType() >= 3 {
 		return blocks.BusTypeMap[0]
@@ -180,7 +180,7 @@ func (b *Block) GetBusType() string {
 }
 
 // GetFlag returns if source is a simulation
-func (b *Block) GetFlag() string {
+func (b *Block) Flag() string {
 	f := int(b.Data.Flags)
 	if f == 0 {
 		return ""
