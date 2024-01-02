@@ -11,6 +11,7 @@ import (
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 	"github.com/LincolnG4/GoMDF/internal/blocks/AT"
+	"github.com/LincolnG4/GoMDF/internal/blocks/CC"
 	"github.com/LincolnG4/GoMDF/internal/blocks/CG"
 	"github.com/LincolnG4/GoMDF/internal/blocks/CN"
 	"github.com/LincolnG4/GoMDF/internal/blocks/DG"
@@ -38,6 +39,14 @@ type ChannelGroup struct {
 	Channels   map[string]*CN.Block
 	DataGroup  *DG.Block
 	SourceInfo SI.SourceInfo
+}
+
+type Channel struct {
+	Name         string
+	Channel      *CN.Block
+	DataGroup    *DG.Block
+	ChannelGroup *CG.Block
+	SourceInfo   SI.SourceInfo
 }
 
 func ReadFile(file *os.File) (*MF4, error) {
@@ -91,9 +100,21 @@ func (m *MF4) read() {
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
-				channelName := cnBlock.GetChannelName(m.File)
-				channelGroup.Channels[channelName] = cnBlock
+
+				cn := Channel{
+					Name:       cnBlock.GetChannelName(m.File),
+					SourceInfo: SI.Get(file, version, cnBlock.Link.SiSource),
+				}
+
+				// load Convertion Block
+				if cnBlock.Link.CcConvertion != 0 {
+					cc := CC.New(file, version, cnBlock.Link.CcConvertion)
+					fmt.Printf("CC: %+v\n", cc)
+				}
+
+				channelGroup.Channels[cn.Name] = cnBlock
 				mdCommentAdress := cnBlock.GetCommentMd()
+
 				if mdCommentAdress != 0 {
 					comment := MD.New(file, mdCommentAdress)
 					fmt.Println(comment)
@@ -102,6 +123,7 @@ func (m *MF4) read() {
 					mdComment := ""
 					fmt.Print(mdComment, mdBlock, "\n")
 				}
+
 				nextAddressCN = cnBlock.Next()
 			}
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
@@ -229,24 +251,8 @@ func (m *MF4) GetAttachments() []AT.AttFile {
 }
 
 // Saves attachment file input to output path
-func (m *MF4) SaveAttachment(a AT.AttFile, op string) AT.AttFile {
-	return a.Save(m.File, op)
-}
-
-func debug(file *os.File, offset int64, size int) {
-	_, err := file.Seek(int64(offset), io.SeekStart)
-	if err != nil {
-		panic(err)
-	}
-	buf := make([]byte, size)
-	n, err := file.Read(buf[:cap(buf)])
-	buf = buf[:n]
-	if err != nil {
-		if err != io.EOF {
-			panic(err)
-		}
-	}
-	spew.Dump(buf)
+func (m *MF4) SaveAttachment(attachment AT.AttFile, outputPath string) AT.AttFile {
+	return attachment.Save(m.File, outputPath)
 }
 
 // Version method returns the MDF file version
@@ -446,4 +452,55 @@ func loadDataType(dataType uint8, lenSize int) interface{} {
 
 	}
 	return dtype
+}
+
+func (cn *Channel) readInvalidationBit(file *os.File) (bool, error) {
+	address := cn.getInvalidationBitStart()
+
+	if _, err := file.Seek(address, io.SeekCurrent); err != nil {
+		return false, err
+	}
+
+	var invalByte uint8
+	if err := binary.Read(file, binary.LittleEndian, &invalByte); err != nil {
+		return false, err
+	}
+
+	// Within this Byte read the bit specified by (cn_inval_bit_pos & 0x07)
+	invalBitPos := uint(cn.getInvalidationBitPos() & 0x07)
+	isBitSet := blocks.IsBitSet(int(invalByte), int(invalBitPos))
+
+	return isBitSet, nil
+}
+
+func (cn *Channel) getInvalidationBitStart() int64 {
+	return int64(cn.getRecordID()) + int64(cn.getDataBytes())
+}
+
+func (cn *Channel) getRecordID() uint8 {
+	return cn.DataGroup.GetRecordID()
+}
+
+func (cn *Channel) getDataBytes() uint32 {
+	return cn.ChannelGroup.GetDataBytes()
+}
+
+func (cn *Channel) getInvalidationBitPos() uint32 {
+	return cn.Channel.InvalBitPos()
+}
+
+func debug(file *os.File, offset int64, size int) {
+	_, err := file.Seek(int64(offset), io.SeekStart)
+	if err != nil {
+		panic(err)
+	}
+	buf := make([]byte, size)
+	n, err := file.Read(buf[:cap(buf)])
+	buf = buf[:n]
+	if err != nil {
+		if err != io.EOF {
+			panic(err)
+		}
+	}
+	spew.Dump(buf)
 }

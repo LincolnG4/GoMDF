@@ -132,7 +132,7 @@ func (b *Block) BlankBlock() *Block {
 	}
 }
 
-func (b *Block) GetSignalData(file *os.File, startAdress uint64, recordsize uint8, size uint64) {
+func (b *Block) ReadDataRecord() {
 
 }
 
@@ -140,6 +140,17 @@ func (b *Block) IsAllValuesInvalid() bool {
 	// Bit 0 corresponds to the "all values invalid" flag
 	// Check if bit 0 is set
 	return blocks.IsBitSet(int(b.Data.Flags), 0)
+}
+
+func (b *Block) IsAllValuesValid() bool {
+	if !blocks.IsBitSet(int(b.Data.Flags), 0) && !blocks.IsBitSet(int(b.Data.Flags), 1) {
+		return true
+	}
+	return false
+}
+
+func (b *Block) InvalBitPos() uint32 {
+	return b.Data.InvalBitPos
 }
 
 func (b *Block) GetChannelName(f *os.File) string {
@@ -152,6 +163,14 @@ func (b *Block) getTxName() int64 {
 
 func (b *Block) GetCommentMd() int64 {
 	return b.Link.MdComment
+}
+
+func (b *Block) GetType() uint8 {
+	return b.Data.Type
+}
+
+func (b *Block) GetSyncType() uint8 {
+	return b.Data.SyncType
 }
 
 func (b *Block) Next() int64 {

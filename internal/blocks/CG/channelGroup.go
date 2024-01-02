@@ -114,6 +114,10 @@ func (b *Block) IsVLSD() bool {
 	return blocks.IsBitSet(int(b.getFlag()), 0)
 }
 
+func (b *Block) GetDataBytes() uint32 {
+	return b.Data.DataBytes
+}
+
 func (b *Block) Type(version uint16) []string {
 	t := []string{}
 	f := int(b.Data.Flags)

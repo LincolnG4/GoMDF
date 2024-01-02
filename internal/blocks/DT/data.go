@@ -40,10 +40,14 @@ func New(file *os.File, startAdress int64) *Block {
 	return &b
 }
 
+func (b *Block) DataBlockType() string {
+	return string(b.Header.ID[:])
+}
+
 func (b *Block) BlankBlock() *Block {
 	return &Block{
 		Header: blocks.Header{
-			ID:        [4]byte{'#', '#', 'D', 'T'},
+			ID:        blocks.SplitIdToArray(blocks.DtID),
 			Reserved:  [4]byte{},
 			Length:    64,
 			LinkCount: 4,
