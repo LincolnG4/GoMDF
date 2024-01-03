@@ -4,8 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
+	"github.com/LincolnG4/GoMDF/internal/blocks/CC"
 	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
 )
 
@@ -119,21 +121,73 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	return &b
 }
 
-func (b *Block) BlankBlock() *Block {
-	return &Block{
-		Header: blocks.Header{
-			ID:        blocks.SplitIdToArray(blocks.CnID),
-			Reserved:  [4]byte{},
-			Length:    blocks.CnblockSize,
-			LinkCount: 0,
-		},
-		Link: Link{},
-		Data: Data{},
+// GetConversion return Conversion structs that hold the formula to convert
+// raw sample to desired value.
+func (b *Block) GetConversion(file *os.File, version uint16) CC.Conversion {
+	cc := b.NewConversion(file, version)
+	if cc == nil {
+		return nil
 	}
+	return cc.Get(file)
 }
 
-func (b *Block) ReadDataRecord() {
+// NewConversion create a new CCBlock according to the Link.CcConvertion field.
+func (b *Block) NewConversion(file *os.File, version uint16) *CC.Block {
+	if b.Link.CcConvertion == 0 {
+		return nil
+	}
+	return CC.New(file, version, b.Link.CcConvertion)
+}
 
+func (b *Block) LoadDataType(lenSize int) interface{} {
+	var dtype interface{}
+
+	switch b.GetDataType() {
+	case 0, 1:
+		switch lenSize {
+		case 1:
+			dtype = uint8(0)
+		case 2:
+			dtype = uint16(0)
+		case 4:
+			dtype = uint32(0)
+		case 8:
+			dtype = uint64(0)
+		}
+	case 2, 3:
+		switch lenSize {
+		case 1:
+			dtype = int8(0)
+		case 2:
+			dtype = int16(0)
+		case 4:
+			dtype = int32(0)
+		case 8:
+			dtype = int64(0)
+		}
+
+	case 4, 5:
+		switch lenSize {
+		case 4:
+			dtype = float32(0)
+		case 8:
+			dtype = float64(0)
+
+		}
+
+	}
+	return dtype
+}
+
+func (b *Block) IsLittleEndian() bool {
+	//Data Types that are Little Endian: 0, 2, 4, 8, 15
+	littleEndianFormats := []int{0, 2, 4, 8, 15}
+
+	return slices.Contains(littleEndianFormats, int(b.GetDataType()))
+}
+
+func (b *Block) IsComposed() bool {
+	return b.Link.Composition != 0
 }
 
 func (b *Block) IsAllValuesInvalid() bool {
@@ -173,6 +227,23 @@ func (b *Block) GetSyncType() uint8 {
 	return b.Data.SyncType
 }
 
+func (b *Block) GetDataType() uint8 {
+	return b.Data.DataType
+}
+
 func (b *Block) Next() int64 {
 	return b.Link.Next
+}
+
+func (b *Block) BlankBlock() *Block {
+	return &Block{
+		Header: blocks.Header{
+			ID:        blocks.SplitIdToArray(blocks.CnID),
+			Reserved:  [4]byte{},
+			Length:    blocks.CnblockSize,
+			LinkCount: 0,
+		},
+		Link: Link{},
+		Data: Data{},
+	}
 }

@@ -3,6 +3,7 @@ package CC
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
@@ -34,10 +35,35 @@ type Data struct {
 	Val         []float64
 }
 
-type Conversion struct {
+type Conversion interface {
+	Apply(*[]interface{})
+}
+
+type Info struct {
 	Name    string
 	Unit    string
 	Comment string
+}
+
+type Linear struct {
+	Info Info
+	P1   float64
+	P2   float64
+}
+
+type Rational struct {
+	Info Info
+	P1   float64
+	P2   float64
+	P3   float64
+	P4   float64
+	P5   float64
+	P6   float64
+}
+
+type Interporlation struct {
+	Info Info
+	P1   []float64
 }
 
 func New(file *os.File, version uint16, startAdress int64) *Block {
@@ -104,18 +130,121 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	b.Data.Val = foo
 
 	fmt.Printf("%+v\n", b.Data)
-
 	return &b
 }
 
-// GetConversion loads informations of conversion formula to be applied
-// on the measure samples.
-func (b *Block) GetConversion(file *os.File) Conversion {
-	return Conversion{
+// Get returns an conversion struct type
+func (b *Block) Get(file *os.File) Conversion {
+	v := b.getVal()
+
+	if len(v) < 1 {
+		return nil
+	}
+
+	switch b.dataType() {
+	case 0:
+		return nil
+	case 1:
+		return b.GetLinear(file, v)
+	case 2:
+		return b.GetRational(file, v)
+	case 3:
+		fmt.Println("Not implemented")
+		return nil
+	case 4:
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (b *Block) getVal() []float64 {
+	return b.Data.Val
+}
+
+// GetLinear returns linear conversion struct type
+func (b *Block) GetLinear(file *os.File, v []float64) Conversion {
+	return &Linear{
+		Info: b.getInfo(file),
+		P1:   v[0],
+		P2:   v[1],
+	}
+}
+
+// GetRational returns rational conversion struct type
+func (b *Block) GetRational(file *os.File, v []float64) Conversion {
+	return &Rational{
+		Info: b.getInfo(file),
+		P1:   v[0],
+		P2:   v[1],
+		P3:   v[2],
+		P4:   v[3],
+		P5:   v[4],
+		P6:   v[5],
+	}
+}
+
+// linear formula with two parameters `(y=a*x+b)`
+func (l *Linear) Apply(sample *[]interface{}) {
+	s := *sample
+
+	for i, v := range s {
+		switch c := v.(type) {
+		case int:
+			s[i] = float64(c)*l.P2 + l.P1
+		case float64:
+			s[i] = c*l.P2 + l.P1
+		default:
+			fmt.Printf("Variable type %s: not numerical", c)
+		}
+	}
+}
+
+// Rational formula with two parameters
+// `(y=v1*x+v2*x+v3*x/v4*x+v5*x+v6*x)`
+func (r *Rational) Apply(sample *[]interface{}) {
+	s := *sample
+
+	for i, v := range s {
+		switch c := v.(type) {
+		case int:
+			d := float64(c)
+			s[i] = (r.P1*math.Pow(d, 2) + r.P2*d + r.P3) / (r.P4*math.Pow(d, 2) + r.P5*d + r.P6)
+		case float64:
+			s[i] = (r.P1*math.Pow(c, 2) + r.P2*c + r.P3) / (r.P4*math.Pow(c, 2) + r.P5*c + r.P6)
+		default:
+			fmt.Printf("Variable type %s: not numerical", c)
+		}
+	}
+}
+
+// Interporlation formula
+func (it *Interporlation) Apply(sample *[]interface{}) {
+	s := *sample
+
+	for i, v := range s {
+		switch c := v.(type) {
+		case int:
+			d := float64(c)
+			s[i] = d
+		case float64:
+			s[i] = c
+		default:
+			fmt.Printf("Variable type %s: not numerical", c)
+		}
+	}
+}
+
+func (b *Block) getInfo(file *os.File) Info {
+	return Info{
 		Name:    b.name(file),
 		Unit:    b.unit(file),
 		Comment: b.comment(file),
 	}
+}
+
+func (b *Block) dataType() uint8 {
+	return b.Data.Type
 }
 
 func (b *Block) name(file *os.File) string {
