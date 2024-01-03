@@ -15,6 +15,7 @@ const (
 	CnID = "##CN"
 	DgID = "##DG"
 	DtID = "##DT"
+	DvID = "##DV"
 	EvID = "##EV"
 	FhID = "##FH"
 	HdID = "##HD"
@@ -78,6 +79,7 @@ var (
 const (
 	RemoteMaster string = "REMOTE_MASTER"
 )
+
 const (
 	LinkSize    uint64 = 8
 	HeaderSize  uint64 = 24

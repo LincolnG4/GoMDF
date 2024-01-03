@@ -1,12 +1,9 @@
 package mf4
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
-	"reflect"
 	"time"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
@@ -14,6 +11,7 @@ import (
 	"github.com/LincolnG4/GoMDF/internal/blocks/CG"
 	"github.com/LincolnG4/GoMDF/internal/blocks/CN"
 	"github.com/LincolnG4/GoMDF/internal/blocks/DG"
+	"github.com/LincolnG4/GoMDF/internal/blocks/DT"
 	"github.com/LincolnG4/GoMDF/internal/blocks/EV"
 	"github.com/LincolnG4/GoMDF/internal/blocks/FH"
 	"github.com/LincolnG4/GoMDF/internal/blocks/HD"
@@ -35,7 +33,7 @@ type MF4 struct {
 
 type ChannelGroup struct {
 	Block      *CG.Block
-	Channels   map[string]*CN.Block
+	Channels   map[string]*Channel
 	DataGroup  *DG.Block
 	SourceInfo SI.SourceInfo
 }
@@ -83,7 +81,7 @@ func (m *MF4) read() {
 
 			channelGroup := &ChannelGroup{
 				Block:      cgBlock,
-				Channels:   make(map[string]*CN.Block),
+				Channels:   make(map[string]*Channel),
 				DataGroup:  dataGroupBlock,
 				SourceInfo: SI.Get(file, version, cgBlock.Link.SiAcqSource),
 			}
@@ -91,9 +89,19 @@ func (m *MF4) read() {
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
-				channelName := cnBlock.GetChannelName(m.File)
-				channelGroup.Channels[channelName] = cnBlock
+
+				cn := &Channel{
+					Name:         cnBlock.GetChannelName(m.File),
+					ChannelGroup: cgBlock,
+					DataGroup:    dataGroupBlock,
+					Block:        cnBlock,
+					SourceInfo:   SI.Get(file, version, cnBlock.Link.SiSource),
+					Convertion:   cnBlock.GetConversion(m.File, version),
+				}
+
+				channelGroup.Channels[cn.Name] = cn
 				mdCommentAdress := cnBlock.GetCommentMd()
+
 				if mdCommentAdress != 0 {
 					comment := MD.New(file, mdCommentAdress)
 					fmt.Println(comment)
@@ -102,6 +110,7 @@ func (m *MF4) read() {
 					mdComment := ""
 					fmt.Print(mdComment, mdBlock, "\n")
 				}
+
 				nextAddressCN = cnBlock.Next()
 			}
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
@@ -133,7 +142,6 @@ func (m *MF4) ChannelNames() map[int][]string {
 
 // GetChannelSample loads sample by DataGroupName and ChannelName
 func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interface{}, error) {
-	var byteOrder binary.ByteOrder
 	file := m.File
 	cgrp := m.ChannelGroup[indexDataGroup]
 
@@ -144,54 +152,32 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 	}
 
 	dg := cgrp.DataGroup
-	cg := cgrp.Block
+	// cg := cgrp.Block
 
 	//Get channel with compositon Structure or Array
-	comp := cn.Link.Composition
-	if comp != 0 {
-		id := make([]byte, 4)
-		seekRead(file, comp, id)
+	// if cn.IsComposed() {
 
-		if string(id) == blocks.CaID {
-			readArrayBlock(file, comp)
-		}
-	}
+	// }
 
-	if cn.IsAllValuesInvalid() {
-		return nil, fmt.Errorf("channel %s has invalid read", channelName)
-	}
+	// if cn.IsAllValuesInvalid() {
+	// 	return nil, fmt.Errorf("channel %s has invalid read", channelName)
+	// }
 
-	dataType := cn.Data.DataType
-	readAddr := int64(blocks.HeaderSize) + dg.Link.Data + int64(dg.GetRecordID()) + int64(cn.Data.ByteOffset)
-	size := (cn.Data.BitCount + uint32(cn.Data.BitOffset)) / 8
-	data := make([]byte, size)
-	sample := make([]interface{}, 0)
+	dataRecordBlock := DT.New(file, dg.Link.Data)
+	fmt.Println(dataRecordBlock.DataBlockType())
 
-	rowSize := int64(cg.Data.DataBytes)
-
-	if dataType == 0 || dataType == 2 || dataType == 4 || dataType == 8 || dataType == 15 {
-		byteOrder = binary.LittleEndian
+	var sample []interface{}
+	var err error
+	if dataRecordBlock.DataBlockType() == blocks.DtID || dataRecordBlock.DataBlockType() == blocks.DvID {
+		sample, err = cn.readSingleDataBlock(file)
 	} else {
-		byteOrder = binary.BigEndian
+		fmt.Println("package not read to read")
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	dtype := loadDataType(dataType, len(data))
-
-	// Create a new instance of the data type using reflection
-	sliceElemType := reflect.TypeOf(dtype)
-	sliceElem := reflect.New(sliceElemType).Interface()
-
-	for i := uint64(0); i < cg.Data.CycleCount; i += 1 {
-		seekRead(file, readAddr, data)
-		buf := bytes.NewBuffer(data)
-		err := binary.Read(buf, byteOrder, sliceElem)
-		if err != nil {
-			return nil, fmt.Errorf("error during parsing channel: %s ", err)
-		}
-		sample = append(sample, reflect.ValueOf(sliceElem).Elem().Interface())
-		readAddr += rowSize
-	}
-
+	cn.applyConvertion(&sample)
 	return sample, nil
 }
 
@@ -229,24 +215,8 @@ func (m *MF4) GetAttachments() []AT.AttFile {
 }
 
 // Saves attachment file input to output path
-func (m *MF4) SaveAttachment(a AT.AttFile, op string) AT.AttFile {
-	return a.Save(m.File, op)
-}
-
-func debug(file *os.File, offset int64, size int) {
-	_, err := file.Seek(int64(offset), io.SeekStart)
-	if err != nil {
-		panic(err)
-	}
-	buf := make([]byte, size)
-	n, err := file.Read(buf[:cap(buf)])
-	buf = buf[:n]
-	if err != nil {
-		if err != io.EOF {
-			panic(err)
-		}
-	}
-	spew.Dump(buf)
+func (m *MF4) SaveAttachment(attachment AT.AttFile, outputPath string) AT.AttFile {
+	return attachment.Save(m.File, outputPath)
 }
 
 // Version method returns the MDF file version
@@ -394,56 +364,34 @@ func (m *MF4) loadHeader() {
 func (m *MF4) getHeaderMdComment() int64 {
 	return m.Header.Link.MdComment
 }
+
 func seekRead(file *os.File, readAddr int64, data []byte) {
 	_, errs := file.Seek(readAddr, 0)
 	if errs != nil {
 		if errs != io.EOF {
-			fmt.Println(errs, "Memory Addr out of size")
+			fmt.Println(errs, "memory Addr out of size")
 		}
 	}
 	_, err := file.Read(data)
 	if err != nil {
 		if err != io.EOF {
-			fmt.Println("LoadBuffer error: ", err)
+			fmt.Println("loadBuffer error: ", err)
 		}
 	}
 }
 
-func loadDataType(dataType uint8, lenSize int) interface{} {
-	var dtype interface{}
-	switch dataType {
-	case 0, 1:
-		switch lenSize {
-		case 1:
-			dtype = uint8(0)
-		case 2:
-			dtype = uint16(0)
-		case 4:
-			dtype = uint32(0)
-		case 8:
-			dtype = uint64(0)
-		}
-	case 2, 3:
-		switch lenSize {
-		case 1:
-			dtype = int8(0)
-		case 2:
-			dtype = int16(0)
-		case 4:
-			dtype = int32(0)
-		case 8:
-			dtype = int64(0)
-		}
-
-	case 4, 5:
-		switch lenSize {
-		case 4:
-			dtype = float32(0)
-		case 8:
-			dtype = float64(0)
-
-		}
-
+func debug(file *os.File, offset int64, size int) {
+	_, err := file.Seek(int64(offset), io.SeekStart)
+	if err != nil {
+		panic(err)
 	}
-	return dtype
+	buf := make([]byte, size)
+	n, err := file.Read(buf[:cap(buf)])
+	buf = buf[:n]
+	if err != nil {
+		if err != io.EOF {
+			panic(err)
+		}
+	}
+	spew.Dump(buf)
 }

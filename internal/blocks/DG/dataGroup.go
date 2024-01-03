@@ -69,10 +69,10 @@ func New(file *os.File, startAdress int64) *Block {
 
 // IsSorted checks if is Sorted `True`. Else `False` if it is Unsorted
 func (b *Block) IsSorted() bool {
-	return b.GetRecordID() == 0
+	return b.GetRecordIDSize() == 0
 }
 
-func (b *Block) GetRecordID() uint8 {
+func (b *Block) GetRecordIDSize() uint8 {
 	return b.Data.RecIDSize
 }
 
