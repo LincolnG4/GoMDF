@@ -208,7 +208,12 @@ func (b *Block) InvalBitPos() uint32 {
 }
 
 func (b *Block) GetChannelName(f *os.File) string {
-	return TX.GetText(f, b.getTxName())
+	t, err := TX.GetText(f, b.getTxName())
+	if err != nil {
+		return ""
+	}
+
+	return t
 }
 
 func (b *Block) getTxName() int64 {

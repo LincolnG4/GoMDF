@@ -93,3 +93,18 @@ const (
 	ChblockSize uint64 = 160
 	EvblockSize uint64 = 24
 )
+
+const (
+	CcNoConversion          uint8 = 0
+	CcLinear                uint8 = 1
+	CcRational              uint8 = 2
+	CcAlgebraic             uint8 = 3
+	CcVVLookUpInterpolation uint8 = 4
+	CcVVLookUp              uint8 = 5
+	CcVrVLookUp             uint8 = 6
+	CcVTLookUp              uint8 = 7
+	CcVrTLookUp             uint8 = 8
+	CcTVLookUp              uint8 = 9
+	CcTTLookUp              uint8 = 10
+	CcBitfield              uint8 = 11
+)

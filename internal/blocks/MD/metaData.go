@@ -47,8 +47,12 @@ func New(file *os.File, startAdress int64) string {
 		r := string(b.Data)
 		return r
 	}
+	t, err := TX.GetText(file, startAdress)
+	if err != nil {
+		return ""
+	}
 
-	return TX.GetText(file, startAdress)
+	return t
 }
 
 func (b *Block) BlankBlock() *Block {

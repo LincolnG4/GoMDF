@@ -8,6 +8,7 @@ import (
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
+	"github.com/Pramod-Devireddy/go-exprtk"
 )
 
 type Block struct {
@@ -59,6 +60,11 @@ type Rational struct {
 	P4   float64
 	P5   float64
 	P6   float64
+}
+
+type Algebraic struct {
+	Info    Info
+	Formula string
 }
 
 type Interporlation struct {
@@ -135,25 +141,33 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 // Get returns an conversion struct type
 func (b *Block) Get(file *os.File) Conversion {
-	v := b.getVal()
-
-	if len(v) < 1 {
-		return nil
-	}
-
 	switch b.dataType() {
-	case 0:
+	case blocks.CcNoConversion:
 		return nil
-	case 1:
-		return b.GetLinear(file, v)
-	case 2:
-		return b.GetRational(file, v)
-	case 3:
-		fmt.Println("Not implemented")
+	case blocks.CcLinear:
+		return b.GetLinear(file)
+	case blocks.CcRational:
+		return b.GetRational(file)
+	case blocks.CcAlgebraic:
+		return b.GetAlgebraic(file)
+	case blocks.CcVVLookUpInterpolation:
 		return nil
-	case 4:
+	case blocks.CcVVLookUp:
+		return nil
+	case blocks.CcVrVLookUp:
+		return nil
+	case blocks.CcVTLookUp:
+		return nil
+	case blocks.CcVrTLookUp:
+		return nil
+	case blocks.CcTVLookUp:
+		return nil
+	case blocks.CcTTLookUp:
+		return nil
+	case blocks.CcBitfield:
 		return nil
 	default:
+		fmt.Println("OUSSSSS")
 		return nil
 	}
 }
@@ -163,7 +177,9 @@ func (b *Block) getVal() []float64 {
 }
 
 // GetLinear returns linear conversion struct type
-func (b *Block) GetLinear(file *os.File, v []float64) Conversion {
+func (b *Block) GetLinear(file *os.File) Conversion {
+	v := b.getVal()
+
 	return &Linear{
 		Info: b.getInfo(file),
 		P1:   v[0],
@@ -172,7 +188,9 @@ func (b *Block) GetLinear(file *os.File, v []float64) Conversion {
 }
 
 // GetRational returns rational conversion struct type
-func (b *Block) GetRational(file *os.File, v []float64) Conversion {
+func (b *Block) GetRational(file *os.File) Conversion {
+	v := b.getVal()
+
 	return &Rational{
 		Info: b.getInfo(file),
 		P1:   v[0],
@@ -182,6 +200,31 @@ func (b *Block) GetRational(file *os.File, v []float64) Conversion {
 		P5:   v[4],
 		P6:   v[5],
 	}
+}
+
+func (b *Block) GetAlgebraic(file *os.File) Conversion {
+	f := b.getRef()
+	formula := b.refToString(file, f)
+	fmt.Println(formula)
+	return &Algebraic{
+		Info:    b.getInfo(file),
+		Formula: formula[0],
+	}
+}
+
+func (b *Block) refToString(file *os.File, ref []int64) []string {
+	var text string
+	var err error
+
+	r := make([]string, 0)
+	for i := 0; i < len(ref); i++ {
+		text, err = TX.GetText(file, ref[i])
+		if err != nil {
+			return []string{}
+		}
+		r = append(r, text)
+	}
+	return r
 }
 
 // linear formula with two parameters `(y=a*x+b)`
@@ -219,6 +262,39 @@ func (r *Rational) Apply(sample *[]interface{}) {
 }
 
 // Interporlation formula
+func (a *Algebraic) Apply(sample *[]interface{}) {
+	var result interface{}
+	var err error
+	var x string = "X"
+
+	s := *sample
+
+	exprtkObj := exprtk.NewExprtk()
+	defer exprtkObj.Delete()
+
+	exprtkObj.SetExpression(a.Formula)
+	exprtkObj.AddDoubleVariable(x)
+	err = exprtkObj.CompileExpression()
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	for i, v := range s {
+		switch c := v.(type) {
+		case int:
+			exprtkObj.SetDoubleVariableValue(x, float64(c))
+		case float64:
+			exprtkObj.SetDoubleVariableValue(x, c)
+		default:
+			fmt.Printf("Variable type %s: not numerical", c)
+		}
+		result = exprtkObj.GetEvaluatedValue()
+		s[i] = result
+	}
+}
+
+// Interporlation formula
 func (it *Interporlation) Apply(sample *[]interface{}) {
 	s := *sample
 
@@ -251,21 +327,43 @@ func (b *Block) name(file *os.File) string {
 	if b.Link.TxName == 0 {
 		return ""
 	}
-	return TX.GetText(file, b.Link.TxName)
+
+	t, err := TX.GetText(file, b.Link.TxName)
+	if err != nil {
+		return ""
+	}
+
+	return t
 }
 
 func (b *Block) unit(file *os.File) string {
 	if b.Link.MdUnit == 0 {
 		return ""
 	}
-	return TX.GetText(file, b.Link.MdUnit)
+
+	t, err := TX.GetText(file, b.Link.MdUnit)
+	if err != nil {
+		return ""
+	}
+
+	return t
 }
 
 func (b *Block) comment(file *os.File) string {
 	if b.Link.MdComment == 0 {
 		return ""
 	}
-	return TX.GetText(file, b.Link.MdComment)
+
+	t, err := TX.GetText(file, b.Link.MdComment)
+	if err != nil {
+		return ""
+	}
+
+	return t
+}
+
+func (b *Block) getRef() []int64 {
+	return b.Link.Ref
 }
 
 func (b *Block) BlankBlock() *Block {
