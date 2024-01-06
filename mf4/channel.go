@@ -28,7 +28,6 @@ type Channel struct {
 func (c *Channel) readSingleDataBlock(file *os.File) ([]interface{}, error) {
 	var byteOrder binary.ByteOrder
 
-	fmt.Printf("\n %+v\n", c)
 	cn := c.Block
 	cg := c.ChannelGroup
 	dg := c.DataGroup

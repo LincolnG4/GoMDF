@@ -91,21 +91,39 @@ func (b *Block) Path(file *os.File) string {
 	if b.Link.TxPath == 0 {
 		return ""
 	}
-	return TX.GetText(file, b.Link.TxPath)
+
+	t, err := TX.GetText(file, b.Link.TxPath)
+	if err != nil {
+		return ""
+	}
+
+	return t
 }
 
 func (b *Block) Name(file *os.File) string {
 	if b.Link.TxName == 0 {
 		return ""
 	}
-	return TX.GetText(file, b.Link.TxName)
+
+	t, err := TX.GetText(file, b.Link.TxName)
+	if err != nil {
+		return ""
+	}
+
+	return t
 }
 
 func (b *Block) Comment(file *os.File) string {
 	if b.Link.TxName == 0 {
 		return ""
 	}
-	return TX.GetText(file, b.Link.TxName)
+
+	t, err := TX.GetText(file, b.Link.MdComment)
+	if err != nil {
+		return ""
+	}
+
+	return t
 }
 
 func Get(file *os.File, version uint16, address int64) SourceInfo {

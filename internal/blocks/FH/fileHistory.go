@@ -103,7 +103,12 @@ func (b *Block) BlankBlock() *Block {
 }
 
 func (b *Block) GetChangeLog(file *os.File) string {
-	return TX.GetText(file, b.GetMdComment())
+	t, err := TX.GetText(file, b.GetMdComment())
+	if err != nil {
+		return ""
+	}
+
+	return t
 }
 
 func (b *Block) GetMdComment() int64 {

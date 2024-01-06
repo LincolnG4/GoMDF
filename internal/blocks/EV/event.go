@@ -163,10 +163,15 @@ func (b *Block) readData(file *os.File) error {
 
 func (b *Block) LoadEvent(f *os.File) *Event {
 	var n, c string
+	var err error
 
 	if b.Link.TxName != 0 {
-		n = TX.GetText(f, b.Link.TxName)
+		n, err = TX.GetText(f, b.Link.TxName)
+		if err != nil {
+			n = ""
+		}
 	}
+
 	if b.Link.MdComment != 0 {
 		c = MD.New(f, b.Link.MdComment)
 	}

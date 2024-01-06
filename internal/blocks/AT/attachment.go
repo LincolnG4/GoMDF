@@ -126,9 +126,17 @@ func (a AttFile) Save(file *os.File, outputPath string) AttFile {
 	}
 	flag := int(d.Flags)
 	data := d.EmbeddedData
-	a.Path = strings.ReplaceAll(string(TX.GetText(file, b.GetTxFilename())), "\\", string(os.PathSeparator))
+	t, err := TX.GetText(file, b.GetTxFilename())
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	a.Path = strings.ReplaceAll(t, "\\", string(os.PathSeparator))
 	filename := filepath.Base(a.Path)
-	filetype := TX.GetText(file, b.Link.TxMimetype)
+	filetype, err := TX.GetText(file, b.Link.TxMimetype)
+	if err != nil {
+		fmt.Println(err)
+	}
 	a.CreatorIndex = fmt.Sprint(d.CreatorIndex)
 	//If file has no extension, try to save it by mime
 	if filepath.Ext(filename) == "" {
@@ -279,7 +287,12 @@ func (b *Block) GetTxMimeType() int64 {
 }
 
 func GetTextString(file *os.File, a int64) string {
-	return TX.GetText(file, a)
+	t, err := TX.GetText(file, a)
+	if err != nil {
+		return ""
+	}
+
+	return t
 }
 
 func (b *Block) GetFileName(file *os.File, a int64) string {

@@ -98,7 +98,7 @@ func (m *MF4) read() {
 					SourceInfo:   SI.Get(file, version, cnBlock.Link.SiSource),
 					Convertion:   cnBlock.GetConversion(m.File, version),
 				}
-
+				fmt.Printf("Channel:%s %+v\n", cn.Name, cn.Convertion)
 				channelGroup.Channels[cn.Name] = cn
 				mdCommentAdress := cnBlock.GetCommentMd()
 
@@ -142,6 +142,9 @@ func (m *MF4) ChannelNames() map[int][]string {
 
 // GetChannelSample loads sample by DataGroupName and ChannelName
 func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interface{}, error) {
+	var sample []interface{}
+	var err error
+
 	file := m.File
 	cgrp := m.ChannelGroup[indexDataGroup]
 
@@ -164,14 +167,11 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 	// }
 
 	dataRecordBlock := DT.New(file, dg.Link.Data)
-	fmt.Println(dataRecordBlock.DataBlockType())
 
-	var sample []interface{}
-	var err error
 	if dataRecordBlock.DataBlockType() == blocks.DtID || dataRecordBlock.DataBlockType() == blocks.DvID {
 		sample, err = cn.readSingleDataBlock(file)
 	} else {
-		fmt.Println("package not read to read")
+		fmt.Println("package not ready to read")
 	}
 	if err != nil {
 		return nil, err
@@ -282,7 +282,13 @@ func (m *MF4) GetMeasureComment() string {
 	if m.getHeaderMdComment() == 0 {
 		return ""
 	}
-	return TX.GetText(m.File, m.getHeaderMdComment())
+
+	t, err := TX.GetText(m.File, m.getHeaderMdComment())
+	if err != nil {
+		return ""
+	}
+
+	return t
 }
 
 // ReadChangeLog reads and prints the change log entries from the MF4 file.
