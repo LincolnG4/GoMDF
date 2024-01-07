@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
@@ -67,9 +68,10 @@ type Algebraic struct {
 	Formula string
 }
 
-type Interporlation struct {
-	Info Info
-	P1   []float64
+type VVInterpolation struct {
+	Info   Info
+	Keys   []float64
+	Values []float64
 }
 
 func New(file *os.File, version uint16, startAdress int64) *Block {
@@ -151,7 +153,7 @@ func (b *Block) Get(file *os.File) Conversion {
 	case blocks.CcAlgebraic:
 		return b.GetAlgebraic(file)
 	case blocks.CcVVLookUpInterpolation:
-		return nil
+		return b.GetVVInterporlation(file)
 	case blocks.CcVVLookUp:
 		return nil
 	case blocks.CcVrVLookUp:
@@ -167,7 +169,6 @@ func (b *Block) Get(file *os.File) Conversion {
 	case blocks.CcBitfield:
 		return nil
 	default:
-		fmt.Println("OUSSSSS")
 		return nil
 	}
 }
@@ -184,6 +185,17 @@ func (b *Block) GetLinear(file *os.File) Conversion {
 		Info: b.getInfo(file),
 		P1:   v[0],
 		P2:   v[1],
+	}
+}
+
+// GetVVInterporlation returns value to value tabular look-up with interpolation
+func (b *Block) GetVVInterporlation(file *os.File) Conversion {
+	v := b.getVal()
+	key, value := createKeyValue(&v)
+	return &VVInterpolation{
+		Info:   b.getInfo(file),
+		Keys:   key,
+		Values: value,
 	}
 }
 
@@ -232,14 +244,8 @@ func (l *Linear) Apply(sample *[]interface{}) {
 	s := *sample
 
 	for i, v := range s {
-		switch c := v.(type) {
-		case int:
-			s[i] = float64(c)*l.P2 + l.P1
-		case float64:
-			s[i] = c*l.P2 + l.P1
-		default:
-			fmt.Printf("Variable type %s: not numerical", c)
-		}
+		c := convertToFloat64(v)
+		s[i] = c*l.P2 + l.P1
 	}
 }
 
@@ -249,15 +255,8 @@ func (r *Rational) Apply(sample *[]interface{}) {
 	s := *sample
 
 	for i, v := range s {
-		switch c := v.(type) {
-		case int:
-			d := float64(c)
-			s[i] = (r.P1*math.Pow(d, 2) + r.P2*d + r.P3) / (r.P4*math.Pow(d, 2) + r.P5*d + r.P6)
-		case float64:
-			s[i] = (r.P1*math.Pow(c, 2) + r.P2*c + r.P3) / (r.P4*math.Pow(c, 2) + r.P5*c + r.P6)
-		default:
-			fmt.Printf("Variable type %s: not numerical", c)
-		}
+		c := convertToFloat64(v)
+		s[i] = (r.P1*math.Pow(c, 2) + r.P2*c + r.P3) / (r.P4*math.Pow(c, 2) + r.P5*c + r.P6)
 	}
 }
 
@@ -269,6 +268,7 @@ func (a *Algebraic) Apply(sample *[]interface{}) {
 
 	s := *sample
 
+	//Configure Formula
 	exprtkObj := exprtk.NewExprtk()
 	defer exprtkObj.Delete()
 
@@ -281,34 +281,71 @@ func (a *Algebraic) Apply(sample *[]interface{}) {
 	}
 
 	for i, v := range s {
-		switch c := v.(type) {
-		case int:
-			exprtkObj.SetDoubleVariableValue(x, float64(c))
-		case float64:
-			exprtkObj.SetDoubleVariableValue(x, c)
-		default:
-			fmt.Printf("Variable type %s: not numerical", c)
-		}
+		c := convertToFloat64(v)
+		exprtkObj.SetDoubleVariableValue(x, c)
 		result = exprtkObj.GetEvaluatedValue()
 		s[i] = result
 	}
 }
 
-// Interporlation formula
-func (it *Interporlation) Apply(sample *[]interface{}) {
-	s := *sample
+func convertToFloat64(value interface{}) float64 {
+	switch v := value.(type) {
+	case int:
+		return float64(v)
+	case float64:
+		return v
+	default:
+		fmt.Printf("Variable type %T: not numerical\n", v)
+		return 0.0 // or handle the error in an appropriate way
+	}
+}
 
+func (VI *VVInterpolation) Apply(sample *[]interface{}) {
+	s := *sample
 	for i, v := range s {
-		switch c := v.(type) {
-		case int:
-			d := float64(c)
-			s[i] = d
-		case float64:
-			s[i] = c
-		default:
-			fmt.Printf("Variable type %s: not numerical", c)
+		c := convertToFloat64(v)
+
+		if c <= VI.Keys[0] {
+			s[i] = VI.Values[0]
+			continue
+		}
+		if c >= VI.Keys[len(VI.Keys)-1] {
+			s[i] = VI.Values[len(VI.Values)-1]
+			continue
+		}
+
+		// Find the index i such that key[i] <= c < key[i+1]
+		index := sort.Search(len(VI.Keys)-1, func(i int) bool {
+			return c < VI.Keys[i+1]
+		})
+
+		// Use linear interpolation for value
+		s[i] = interpolate(c, VI.Keys[index], VI.Keys[index+1], VI.Values[index], VI.Values[index+1])
+	}
+}
+
+func interpolate(x, x0, x1, y0, y1 float64) float64 {
+	return y0 + (x-x0)*(y1-y0)/(x1-x0)
+}
+
+func createKeyValue(val *[]float64) ([]float64, []float64) {
+	v := *val
+	lenV := len(v) / 2
+	keys := make([]float64, lenV)
+	vals := make([]float64, lenV)
+
+	j, k := 0, 0
+	for i := 0; i < len(v)-1; i++ {
+		if i%2 == 0 {
+			keys[j] = v[i]
+			j++
+		} else {
+			vals[k] = v[i]
+			k++
 		}
 	}
+	fmt.Println(keys, vals)
+	return keys, vals
 }
 
 func (b *Block) getInfo(file *os.File) Info {
