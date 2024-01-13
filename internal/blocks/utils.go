@@ -148,3 +148,22 @@ func IsBitSet(value int, bitPosition int) bool {
 	// Use bitwise AND to check if the target bit is set
 	return (value & bitmask) != 0 // 5 & 2 != 0  false
 }
+
+func BinarySearch(vvKeys []float64, c float64) int {
+	low, high := 0, len(vvKeys)-1
+
+	for low <= high {
+		mid := (low + high) / 2
+
+		if vvKeys[mid] <= c && c < vvKeys[mid+1] {
+			return mid
+		} else if c < vvKeys[mid] {
+			high = mid - 1
+		} else {
+			low = mid + 1
+		}
+	}
+
+	// Handle cases where c is outside the range of vvKeys
+	return -1
+}

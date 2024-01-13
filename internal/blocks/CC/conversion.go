@@ -68,10 +68,11 @@ type Algebraic struct {
 	Formula string
 }
 
-type VVInterpolation struct {
+type ValueToValue struct {
 	Info   Info
 	Keys   []float64
 	Values []float64
+	Type   uint8
 }
 
 func New(file *os.File, version uint16, startAdress int64) *Block {
@@ -153,9 +154,9 @@ func (b *Block) Get(file *os.File) Conversion {
 	case blocks.CcAlgebraic:
 		return b.GetAlgebraic(file)
 	case blocks.CcVVLookUpInterpolation:
-		return b.GetVVInterporlation(file)
+		return b.GetValueToValue(file)
 	case blocks.CcVVLookUp:
-		return nil
+		return b.GetValueToValue(file)
 	case blocks.CcVrVLookUp:
 		return nil
 	case blocks.CcVTLookUp:
@@ -189,13 +190,14 @@ func (b *Block) GetLinear(file *os.File) Conversion {
 }
 
 // GetVVInterporlation returns value to value tabular look-up with interpolation
-func (b *Block) GetVVInterporlation(file *os.File) Conversion {
+func (b *Block) GetValueToValue(file *os.File) Conversion {
 	v := b.getVal()
 	key, value := createKeyValue(&v)
-	return &VVInterpolation{
+	return &ValueToValue{
 		Info:   b.getInfo(file),
 		Keys:   key,
 		Values: value,
+		Type:   b.dataType(),
 	}
 }
 
@@ -300,32 +302,74 @@ func convertToFloat64(value interface{}) float64 {
 	}
 }
 
-func (VI *VVInterpolation) Apply(sample *[]interface{}) {
+func (vv *ValueToValue) Apply(sample *[]interface{}) {
+	if vv.Type == blocks.CcVVLookUpInterpolation {
+		vv.withInterpolation(sample)
+	}
+	if vv.Type == blocks.CcVVLookUp {
+		vv.withoutInterpolation(sample)
+	}
+}
+
+func (vv ValueToValue) withInterpolation(sample *[]interface{}) {
+	var check int
 	s := *sample
+	n := len(vv.Keys)
 	for i, v := range s {
 		c := convertToFloat64(v)
-
-		if c <= VI.Keys[0] {
-			s[i] = VI.Values[0]
+		check = 0
+		if c <= vv.Keys[check] {
+			s[i] = vv.Values[check]
 			continue
 		}
-		if c >= VI.Keys[len(VI.Keys)-1] {
-			s[i] = VI.Values[len(VI.Values)-1]
+
+		check = n - 1
+		if c >= vv.Keys[check] {
+			s[i] = vv.Values[check]
 			continue
 		}
 
 		// Find the index i such that key[i] <= c < key[i+1]
-		index := sort.Search(len(VI.Keys)-1, func(i int) bool {
-			return c < VI.Keys[i+1]
-		})
+		index := blocks.BinarySearch(vv.Keys, c)
+		if index != -1 {
+			s[i] = interpolate(c, vv.Keys[index], vv.Keys[index+1], vv.Values[index], vv.Values[index+1])
+		}
 
-		// Use linear interpolation for value
-		s[i] = interpolate(c, VI.Keys[index], VI.Keys[index+1], VI.Values[index], VI.Values[index+1])
 	}
 }
 
+func (vv ValueToValue) withoutInterpolation(sample *[]interface{}) {
+	s := *sample
+	n := len(vv.Keys)
+
+	for i, v := range s {
+		c := convertToFloat64(v)
+
+		index := sort.Search(n, func(j int) bool {
+			return vv.Keys[j] >= c
+		})
+
+		// Check if c is outside the range of keys
+		if index == 0 {
+			s[i] = vv.Values[0]
+		} else if index == n {
+			s[i] = vv.Values[n-1]
+		} else {
+			prev := vv.Keys[index-1]
+			next := vv.Keys[index]
+
+			if c-prev > next-c {
+				s[i] = vv.Values[index]
+			} else {
+				s[i] = vv.Values[index-1]
+			}
+		}
+	}
+
+}
+
 func interpolate(x, x0, x1, y0, y1 float64) float64 {
-	return y0 + (x-x0)*(y1-y0)/(x1-x0)
+	return y0 + (((x - x0) * (y1 - y0)) / (x1 - x0))
 }
 
 func createKeyValue(val *[]float64) ([]float64, []float64) {
