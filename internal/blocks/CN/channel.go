@@ -123,12 +123,12 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 // GetConversion return Conversion structs that hold the formula to convert
 // raw sample to desired value.
-func (b *Block) GetConversion(file *os.File, version uint16) CC.Conversion {
+func (b *Block) GetConversion(file *os.File, version uint16, channelDataType uint8) CC.Conversion {
 	cc := b.NewConversion(file, version)
 	if cc == nil {
 		return nil
 	}
-	return cc.Get(file)
+	return cc.Get(file, channelDataType)
 }
 
 // NewConversion create a new CCBlock according to the Link.CcConvertion field.

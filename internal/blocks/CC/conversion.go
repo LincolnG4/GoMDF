@@ -68,11 +68,36 @@ type Algebraic struct {
 	Formula string
 }
 
-type ValueToValue struct {
+type ValueValue struct {
 	Info   Info
 	Keys   []float64
 	Values []float64
 	Type   uint8
+}
+
+type ValueRangeToValue struct {
+	Info     Info
+	KeyMin   []float64
+	KeyMax   []float64
+	Values   []float64
+	Default  float64
+	DataType uint8
+}
+
+type ValueRangeToText struct {
+	Info     Info
+	KeyMin   []float64
+	KeyMax   []float64
+	Links    []string
+	Default  string
+	DataType uint8
+}
+
+type ValueText struct {
+	Info    Info
+	Keys    []float64
+	Links   []string
+	Default string
 }
 
 func New(file *os.File, version uint16, startAdress int64) *Block {
@@ -143,7 +168,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 }
 
 // Get returns an conversion struct type
-func (b *Block) Get(file *os.File) Conversion {
+func (b *Block) Get(file *os.File, channelType uint8) Conversion {
 	switch b.dataType() {
 	case blocks.CcNoConversion:
 		return nil
@@ -153,16 +178,14 @@ func (b *Block) Get(file *os.File) Conversion {
 		return b.GetRational(file)
 	case blocks.CcAlgebraic:
 		return b.GetAlgebraic(file)
-	case blocks.CcVVLookUpInterpolation:
-		return b.GetValueToValue(file)
-	case blocks.CcVVLookUp:
+	case blocks.CcVVLookUpInterpolation, blocks.CcVVLookUp:
 		return b.GetValueToValue(file)
 	case blocks.CcVrVLookUp:
-		return nil
+		return b.GetValueRangeToValue(file, channelType)
 	case blocks.CcVTLookUp:
-		return nil
+		return b.GetValueToText(file)
 	case blocks.CcVrTLookUp:
-		return nil
+		return b.GetValueRangeToText(file, channelType)
 	case blocks.CcTVLookUp:
 		return nil
 	case blocks.CcTTLookUp:
@@ -172,10 +195,6 @@ func (b *Block) Get(file *os.File) Conversion {
 	default:
 		return nil
 	}
-}
-
-func (b *Block) getVal() []float64 {
-	return b.Data.Val
 }
 
 // GetLinear returns linear conversion struct type
@@ -193,11 +212,25 @@ func (b *Block) GetLinear(file *os.File) Conversion {
 func (b *Block) GetValueToValue(file *os.File) Conversion {
 	v := b.getVal()
 	key, value := createKeyValue(&v)
-	return &ValueToValue{
+	return &ValueValue{
 		Info:   b.getInfo(file),
 		Keys:   key,
 		Values: value,
 		Type:   b.dataType(),
+	}
+}
+
+// GetVVInterporlation returns value to value tabular look-up with interpolation
+func (b *Block) GetValueRangeToValue(file *os.File, channelType uint8) Conversion {
+	v := b.getVal()
+	keyMin, keyMax, value, def := createKeyMinMaxValue(&v)
+	return &ValueRangeToValue{
+		Info:     b.getInfo(file),
+		KeyMin:   keyMin,
+		KeyMax:   keyMax,
+		Values:   value,
+		Default:  def,
+		DataType: channelType,
 	}
 }
 
@@ -217,28 +250,38 @@ func (b *Block) GetRational(file *os.File) Conversion {
 }
 
 func (b *Block) GetAlgebraic(file *os.File) Conversion {
-	f := b.getRef()
-	formula := b.refToString(file, f)
-	fmt.Println(formula)
+	formula := b.refToString(file)
 	return &Algebraic{
 		Info:    b.getInfo(file),
 		Formula: formula[0],
 	}
 }
 
-func (b *Block) refToString(file *os.File, ref []int64) []string {
-	var text string
-	var err error
+func (b *Block) GetValueToText(file *os.File) Conversion {
+	v := b.getVal()
+	t := b.refToString(file)
 
-	r := make([]string, 0)
-	for i := 0; i < len(ref); i++ {
-		text, err = TX.GetText(file, ref[i])
-		if err != nil {
-			return []string{}
-		}
-		r = append(r, text)
+	return &ValueText{
+		Info:    b.getInfo(file),
+		Keys:    v,
+		Links:   t[:len(t)-2],
+		Default: t[len(t)-1],
 	}
-	return r
+}
+
+func (b *Block) GetValueRangeToText(file *os.File, channelType uint8) Conversion {
+	v := b.getVal()
+	min, max := createKeyValue(&v)
+	t := b.refToString(file)
+
+	return &ValueRangeToText{
+		Info:     b.getInfo(file),
+		KeyMin:   min,
+		KeyMax:   max,
+		Links:    t[:len(t)-2],
+		Default:  t[len(t)-1],
+		DataType: channelType,
+	}
 }
 
 // linear formula with two parameters `(y=a*x+b)`
@@ -290,19 +333,54 @@ func (a *Algebraic) Apply(sample *[]interface{}) {
 	}
 }
 
-func convertToFloat64(value interface{}) float64 {
-	switch v := value.(type) {
-	case int:
-		return float64(v)
-	case float64:
-		return v
-	default:
-		fmt.Printf("Variable type %T: not numerical\n", v)
-		return 0.0 // or handle the error in an appropriate way
+func (vt *ValueText) Apply(sample *[]interface{}) {
+	s := *sample
+
+	for i, v := range s {
+		c := convertToFloat64(v)
+
+		for j := 0; j < len(vt.Keys)-1; j++ {
+			if c == vt.Keys[j] {
+				s[i] = vt.Links[j]
+				break
+			}
+			s[i] = vt.Default
+		}
 	}
 }
 
-func (vv *ValueToValue) Apply(sample *[]interface{}) {
+func (vt *ValueRangeToText) Apply(sample *[]interface{}) {
+	var f func(j int) bool
+	var c float64
+
+	s := *sample
+	n := len(vt.KeyMin)
+
+	fmt.Printf("%+v %+v %+v ", vt.KeyMin, vt.KeyMax, vt.Default)
+	if vt.DataType <= 3 {
+		f = func(j int) bool {
+			return vt.KeyMax[j] >= c
+		}
+	} else {
+		f = func(j int) bool {
+			return vt.KeyMax[j] > c
+		}
+	}
+
+	for i, v := range s {
+		c := convertToFloat64(v)
+
+		index := sort.Search(n, f)
+
+		if index != n && c >= vt.KeyMin[index] {
+			s[i] = vt.Links[index]
+		} else {
+			s[i] = vt.Default
+		}
+	}
+}
+
+func (vv *ValueValue) Apply(sample *[]interface{}) {
 	if vv.Type == blocks.CcVVLookUpInterpolation {
 		vv.withInterpolation(sample)
 	}
@@ -311,12 +389,44 @@ func (vv *ValueToValue) Apply(sample *[]interface{}) {
 	}
 }
 
-func (vv ValueToValue) withInterpolation(sample *[]interface{}) {
+func (vr *ValueRangeToValue) Apply(sample *[]interface{}) {
+	var c float64
+	var f func(j int) bool
+	s := *sample
+	n := len(vr.KeyMin)
+
+	if vr.DataType <= 3 {
+		f = func(j int) bool {
+			return vr.KeyMax[j] >= c
+		}
+	} else {
+		f = func(j int) bool {
+			return vr.KeyMax[j] > c
+		}
+	}
+
+	for i, v := range s {
+		c = convertToFloat64(v)
+
+		index := sort.Search(n, f)
+
+		if index != n && c >= vr.KeyMin[index] {
+			s[i] = vr.Values[index]
+		} else {
+			s[i] = vr.Default
+		}
+	}
+
+}
+
+func (vv ValueValue) withInterpolation(sample *[]interface{}) {
 	var check int
+	var c float64
+
 	s := *sample
 	n := len(vv.Keys)
 	for i, v := range s {
-		c := convertToFloat64(v)
+		c = convertToFloat64(v)
 		check = 0
 		if c <= vv.Keys[check] {
 			s[i] = vv.Values[check]
@@ -338,12 +448,13 @@ func (vv ValueToValue) withInterpolation(sample *[]interface{}) {
 	}
 }
 
-func (vv ValueToValue) withoutInterpolation(sample *[]interface{}) {
+func (vv ValueValue) withoutInterpolation(sample *[]interface{}) {
+	var c float64
 	s := *sample
 	n := len(vv.Keys)
 
 	for i, v := range s {
-		c := convertToFloat64(v)
+		c = convertToFloat64(v)
 
 		index := sort.Search(n, func(j int) bool {
 			return vv.Keys[j] >= c
@@ -372,6 +483,18 @@ func interpolate(x, x0, x1, y0, y1 float64) float64 {
 	return y0 + (((x - x0) * (y1 - y0)) / (x1 - x0))
 }
 
+func convertToFloat64(value interface{}) float64 {
+	switch v := value.(type) {
+	case int:
+		return float64(v)
+	case float64:
+		return v
+	default:
+		fmt.Printf("Variable type %T: not numerical\n", v)
+		return 0.0 // or handle the error in an appropriate way
+	}
+}
+
 func createKeyValue(val *[]float64) ([]float64, []float64) {
 	v := *val
 	lenV := len(v) / 2
@@ -379,7 +502,7 @@ func createKeyValue(val *[]float64) ([]float64, []float64) {
 	vals := make([]float64, lenV)
 
 	j, k := 0, 0
-	for i := 0; i < len(v)-1; i++ {
+	for i := 0; i < len(v); i++ {
 		if i%2 == 0 {
 			keys[j] = v[i]
 			j++
@@ -388,8 +511,27 @@ func createKeyValue(val *[]float64) ([]float64, []float64) {
 			k++
 		}
 	}
-	fmt.Println(keys, vals)
 	return keys, vals
+}
+
+func createKeyMinMaxValue(val *[]float64) ([]float64, []float64, []float64, float64) {
+	v := *val
+	lenV := len(v) / 3
+	keyMin := make([]float64, lenV)
+	keyMax := make([]float64, lenV)
+	vals := make([]float64, lenV)
+
+	// Array alternate cycle between MIN, MAX, Value
+	j := 0
+	for i := 0; i < len(v)-2; i += 3 {
+		keyMin[j] = v[i]
+		keyMax[j] = v[i+1]
+		vals[j] = v[i+2]
+		j++
+	}
+	// Last value is default
+	def := v[len(v)-1]
+	return keyMin, keyMax, vals, def
 }
 
 func (b *Block) getInfo(file *os.File) Info {
@@ -400,8 +542,33 @@ func (b *Block) getInfo(file *os.File) Info {
 	}
 }
 
+func (b *Block) refToString(file *os.File) []string {
+	var text string
+	var err error
+
+	ref := b.getRef()
+	r := make([]string, 0)
+
+	for i := 0; i < len(ref); i++ {
+		text, err = TX.GetText(file, ref[i])
+		if err != nil {
+			return []string{}
+		}
+		r = append(r, text)
+	}
+	return r
+}
+
+func (b *Block) getVal() []float64 {
+	return b.Data.Val
+}
+
 func (b *Block) dataType() uint8 {
 	return b.Data.Type
+}
+
+func (b *Block) getRef() []int64 {
+	return b.Link.Ref
 }
 
 func (b *Block) name(file *os.File) string {
@@ -441,10 +608,6 @@ func (b *Block) comment(file *os.File) string {
 	}
 
 	return t
-}
-
-func (b *Block) getRef() []int64 {
-	return b.Link.Ref
 }
 
 func (b *Block) BlankBlock() *Block {
