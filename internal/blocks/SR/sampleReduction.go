@@ -55,8 +55,6 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		fmt.Println("ERROR", BinaryError)
 	}
 
-	fmt.Printf("%+v\n", b.Link)
-
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
 	b.Data = Data{}
@@ -67,8 +65,6 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	if BinaryError != nil {
 		fmt.Println("ERROR", BinaryError)
 	}
-
-	fmt.Printf("%+v\n", b.Data)
 
 	return &b
 }

@@ -23,6 +23,8 @@ type Channel struct {
 	DataGroup    *DG.Block
 	ChannelGroup *CG.Block
 	SourceInfo   SI.SourceInfo
+	Comment      string
+	MdComment    string
 }
 
 func (c *Channel) readSingleDataBlock(file *os.File) ([]interface{}, error) {

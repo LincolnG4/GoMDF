@@ -45,10 +45,8 @@ func New(file *os.File, startAdress int64) *Block {
 	//Create a buffer based on blocksize
 	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+		fmt.Println("error reading link section dgblock:", BinaryError)
 	}
-
-	fmt.Printf("%+v\n", b.Link)
 
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
@@ -58,10 +56,8 @@ func New(file *os.File, startAdress int64) *Block {
 	//Create a buffer based on blocksize
 	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
 	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+		fmt.Println("error data section from dgblock:", BinaryError)
 	}
-
-	fmt.Printf("%+v\n", b.Data)
 
 	return &b
 

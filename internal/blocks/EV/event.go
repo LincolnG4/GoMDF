@@ -84,9 +84,6 @@ func New(file *os.File, version uint16, startAdress int64) (*Block, error) {
 		return b.BlankBlock(), fmt.Errorf("invalid block ID: expected %s, got %s", blockID, id)
 	}
 
-	fmt.Printf("\n%s\n", id)
-	fmt.Printf("%+v\n", b.Header)
-
 	// Read the link block.
 	linkBytes, err := b.readLink(file)
 	if err != nil {
@@ -126,8 +123,6 @@ func New(file *os.File, version uint16, startAdress int64) (*Block, error) {
 		b.Link.TxGroupName = linkFields[len(linkFields)-1]
 	}
 
-	fmt.Printf("%+v\n", b.Link)
-	fmt.Printf("%+v\n", b.Data)
 	return &b, nil
 }
 

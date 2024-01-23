@@ -117,7 +117,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 	// Read the Link section from the binary file
 	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
-		fmt.Println("Error reading Link section:", err)
+		fmt.Println("error reading link section ccblock:", err)
 	}
 
 	// Populate the Link fields dynamically based on version
@@ -133,7 +133,6 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		Inverse:   linkFields[3],
 		Ref:       linkFields[4:],
 	}
-	fmt.Printf("%+v\n", b.Link)
 
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
@@ -152,18 +151,17 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	for i := 0; i < len(names); i++ {
 		BinaryError := binary.Read(buf, binary.LittleEndian, names[i])
 		if BinaryError != nil {
-			fmt.Println("ERROR", BinaryError)
+			fmt.Println("error loading data from ccblock:", BinaryError)
 		}
 	}
 
-	foo := make([]float64, b.Data.ValCount)
-	BinaryError := binary.Read(buf, binary.LittleEndian, foo)
+	valcount := make([]float64, b.Data.ValCount)
+	BinaryError := binary.Read(buf, binary.LittleEndian, valcount)
 	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+		fmt.Println("error loading data from ccblock:", BinaryError)
 	}
-	b.Data.Val = foo
+	b.Data.Val = valcount
 
-	fmt.Printf("%+v\n", b.Data)
 	return &b
 }
 
@@ -356,7 +354,6 @@ func (vt *ValueRangeToText) Apply(sample *[]interface{}) {
 	s := *sample
 	n := len(vt.KeyMin)
 
-	fmt.Printf("%+v %+v %+v ", vt.KeyMin, vt.KeyMax, vt.Default)
 	if vt.DataType <= 3 {
 		f = func(j int) bool {
 			return vt.KeyMax[j] >= c

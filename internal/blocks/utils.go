@@ -81,7 +81,7 @@ func GetHeader(file *os.File, startAdress int64, blockID string) (Header, error)
 	_, errs := file.Seek(startAdress, 0)
 	if errs != nil {
 		if errs != io.EOF {
-			fmt.Println(errs, "Memory Addr out of size")
+			fmt.Println(errs, "memory addr out of size")
 		}
 	}
 
@@ -97,9 +97,6 @@ func GetHeader(file *os.File, startAdress int64, blockID string) (Header, error)
 	if string(head.ID[:]) != blockID {
 		return Header{}, fmt.Errorf("invalid block id")
 	}
-
-	fmt.Printf("\n%s\n", head.ID)
-	fmt.Printf("%+v\n", head)
 
 	return head, nil
 }
@@ -119,7 +116,7 @@ func LoadBuffer(file *os.File, blockSize uint64) *bytes.Buffer {
 	_, err := file.Read(buf)
 	if err != nil {
 		if err != io.EOF {
-			fmt.Println("LoadBuffer error: ", err)
+			fmt.Println("load buffer error: ", err)
 		}
 	}
 
@@ -129,7 +126,7 @@ func LoadBuffer(file *os.File, blockSize uint64) *bytes.Buffer {
 func ReadInt64FromBinary(file *os.File) int64 {
 	var value int64
 	if err := binary.Read(file, binary.LittleEndian, &value); err != nil {
-		fmt.Println("Error reading binary data:", err)
+		fmt.Println("error reading binary data:", err)
 	}
 	return value
 }
@@ -137,7 +134,7 @@ func ReadInt64FromBinary(file *os.File) int64 {
 func ReadAllFromBinary(file *os.File) int64 {
 	var value int64
 	if err := binary.Read(file, binary.LittleEndian, &value); err != nil {
-		fmt.Println("Error reading binary data:", err)
+		fmt.Println("error reading binary data:", err)
 	}
 	return value
 }

@@ -24,7 +24,7 @@ func New(file *os.File, startAdress int64) *Block {
 	_, errs := file.Seek(startAdress, 0)
 	if errs != nil {
 		if errs != io.EOF {
-			fmt.Println(errs, "Memory Addr out of size")
+			fmt.Println(errs, "memory addr out of size")
 		}
 
 	}

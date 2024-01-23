@@ -35,7 +35,7 @@ func New(file *os.File, startAdress int64) string {
 	//Read header
 	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+		fmt.Println("error", BinaryError)
 		b.BlankBlock()
 	}
 

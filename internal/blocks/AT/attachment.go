@@ -80,10 +80,9 @@ func New(file *os.File, startAdress int64) *Block {
 	//Create a buffer based on blocksize
 	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+		fmt.Println("error:", BinaryError)
 	}
 
-	fmt.Printf("%+v\n", b.Link)
 	return &b
 }
 
@@ -95,13 +94,11 @@ func (b *Block) LoadAttachmentFile(file *os.File) *AttFile {
 		fileName = b.GetFileName(file, b.GetTxFilename())
 	}
 	mimeType := b.GetMimeType(file, b.GetTxMimeType())
-	fmt.Printf("Filename attached: %s\n", fileName)
-	fmt.Printf("Mime attached: %s\n", mimeType)
+
 	//Read MDComment
 	MdCommentAdress := b.GetMdComment()
 	if MdCommentAdress != 0 {
 		comment = MD.New(file, MdCommentAdress)
-		fmt.Printf("%s\n", comment)
 	}
 
 	return &AttFile{
@@ -161,11 +158,9 @@ func (a AttFile) Save(file *os.File, outputPath string) AttFile {
 		fmt.Printf("\n%s is external, the path to the file is %s", filename, a.Path)
 		return a
 	}
-	fmt.Println("### Embbeded")
 
 	//Embbeded file - Compressed Zip
 	if blocks.IsBitSet(flag, 1) {
-		fmt.Println("### COMPRESSED")
 		data = decompressFile(d)
 	}
 
@@ -200,12 +195,12 @@ func decompressFile(d *Data) []byte {
 func saveFile(file *os.File, outputPath string, data *[]byte) error {
 	f, err := os.Create(outputPath)
 	if err != nil {
-		fmt.Println("Error to create the file output: ", err)
+		fmt.Println("error to create the file output: ", err)
 		return err
 	}
 	_, err = f.Write(*data)
 	if err != nil {
-		fmt.Println("Error to write data to file output: ", err)
+		fmt.Println("error to write data to file output: ", err)
 		return err
 	}
 	return nil
@@ -258,13 +253,11 @@ func Get(f *os.File, a int64) []AttFile {
 		}
 
 		mimeType := atBlock.GetMimeType(f, atBlock.GetTxMimeType())
-		fmt.Printf("Filename attached: %s\n", fileName)
-		fmt.Printf("Mime attached: %s\n", mimeType)
+
 		//Read MDComment
 		MdCommentAdress := atBlock.GetMdComment()
 		if MdCommentAdress != 0 {
 			comm = MD.New(f, MdCommentAdress)
-			fmt.Printf("%s\n", comm)
 		}
 
 		arr = append(arr, AttFile{
