@@ -67,7 +67,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 	// Read the Link section from the binary file
 	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
-		fmt.Println("Error reading Link section:", err)
+		fmt.Println("error reading link section channelgroup:", err)
 	}
 
 	// Populate the Link fields dynamically based on version
@@ -90,18 +90,14 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		b.Link.CgMaster = linkFields[6]
 	}
 
-	fmt.Printf("%+v\n", b.Link)
-
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
 	buf := blocks.LoadBuffer(file, blockSize)
 
 	// Create a buffer based on block size
 	if err := binary.Read(buf, binary.LittleEndian, &b.Data); err != nil {
-		fmt.Println("ERROR ddd", err)
+		fmt.Println("error reading data section channelgroup", err)
 	}
-
-	fmt.Printf("%+v\n", b.Data)
 
 	return &b
 }

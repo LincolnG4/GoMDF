@@ -21,7 +21,7 @@ func New(file *os.File, startAdress int64) *Block {
 	_, errs := file.Seek(startAdress, 0)
 	if errs != nil {
 		if errs != io.EOF {
-			fmt.Println(errs, "Memory Addr out of size")
+			fmt.Println(errs, "memory addr out of size")
 		}
 	}
 
@@ -33,7 +33,7 @@ func New(file *os.File, startAdress int64) *Block {
 	//Read header
 	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
 	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+		fmt.Println("error", BinaryError)
 		b.BlankBlock()
 	}
 

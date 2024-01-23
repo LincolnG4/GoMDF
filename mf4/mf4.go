@@ -36,6 +36,7 @@ type ChannelGroup struct {
 	Channels   map[string]*Channel
 	DataGroup  *DG.Block
 	SourceInfo SI.SourceInfo
+	Comment    string
 }
 
 func ReadFile(file *os.File) (*MF4, error) {
@@ -67,12 +68,13 @@ func (m *MF4) read() {
 
 	version := m.MdfVersion()
 	nextDataGroupAddress := m.firstDataGroup()
+
+	comment := ""
 	for nextDataGroupAddress != 0 {
 		dataGroupBlock := DG.New(file, nextDataGroupAddress)
 		mdCommentAddr := dataGroupBlock.MetadataComment()
 		if mdCommentAddr != 0 {
-			comment := MD.New(file, mdCommentAddr)
-			fmt.Printf("%s\n", comment)
+			comment = MD.New(file, mdCommentAddr)
 		}
 
 		nextAddressCG := dataGroupBlock.FirstChannelGroup()
@@ -84,39 +86,37 @@ func (m *MF4) read() {
 				Channels:   make(map[string]*Channel),
 				DataGroup:  dataGroupBlock,
 				SourceInfo: SI.Get(file, version, cgBlock.Link.SiAcqSource),
+				Comment:    comment,
 			}
 
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
-
 				cn := &Channel{
 					Name:         cnBlock.GetChannelName(m.File),
 					ChannelGroup: cgBlock,
 					DataGroup:    dataGroupBlock,
 					Block:        cnBlock,
 					SourceInfo:   SI.Get(file, version, cnBlock.Link.SiSource),
-					Convertion:   cnBlock.GetConversion(m.File, version),
+					Convertion:   cnBlock.GetConversion(m.File, version, cnBlock.GetDataType()),
 				}
-				fmt.Printf("Channel:%s %+v\n", cn.Name, cn.Convertion)
-				channelGroup.Channels[cn.Name] = cn
-				mdCommentAdress := cnBlock.GetCommentMd()
 
+				channelGroup.Channels[cn.Name] = cn
+
+				comment := ""
+				mdCommentAdress := cnBlock.GetCommentMd()
 				if mdCommentAdress != 0 {
-					comment := MD.New(file, mdCommentAdress)
-					fmt.Println(comment)
-				} else {
-					mdBlock := (&MD.Block{}).BlankBlock()
-					mdComment := ""
-					fmt.Print(mdComment, mdBlock, "\n")
+					comment = MD.New(file, mdCommentAdress)
 				}
+
+				cn.Comment = comment
 
 				nextAddressCN = cnBlock.Next()
 			}
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
 			nextAddressCG = cgBlock.Next()
 		}
-		fmt.Println("\n##############################")
+
 		nextDataGroupAddress = dataGroupBlock.Next()
 	}
 }

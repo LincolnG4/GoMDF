@@ -70,7 +70,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	buffEach := make([]byte, blockSize)
 	// Read the Link section from the binary file
 	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
-		fmt.Println("Error reading Link section:", err)
+		fmt.Println("error reading link section chblock:", err)
 	}
 
 	// Populate the Link fields dynamically based on version
@@ -94,14 +94,13 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		MdUnit:       linkFields[6],
 		MdComment:    linkFields[7],
 	}
-	fmt.Printf("%+v\n", b.Link)
 	//Calculates size of Data Block
 	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
 	buf := blocks.LoadBuffer(file, blockSize)
 
 	// Create a buffer based on block size
 	if err := binary.Read(buf, binary.LittleEndian, &b.Data); err != nil {
-		fmt.Println("ERROR", err)
+		fmt.Println("error reading data chblock:", err)
 	}
 
 	if version < 410 {
@@ -115,20 +114,18 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 	if b.Data.Flags == 12 {
 		b.Link.DefaultX = [3]int64{linkFields[9], linkFields[10], linkFields[11]}
-		fmt.Println("DefaultX Flagged")
 	}
-	fmt.Printf("%+v\n", b.Data)
 	return &b
 }
 
 // GetConversion return Conversion structs that hold the formula to convert
 // raw sample to desired value.
-func (b *Block) GetConversion(file *os.File, version uint16) CC.Conversion {
+func (b *Block) GetConversion(file *os.File, version uint16, channelDataType uint8) CC.Conversion {
 	cc := b.NewConversion(file, version)
 	if cc == nil {
 		return nil
 	}
-	return cc.Get(file)
+	return cc.Get(file, channelDataType)
 }
 
 // NewConversion create a new CCBlock according to the Link.CcConvertion field.
