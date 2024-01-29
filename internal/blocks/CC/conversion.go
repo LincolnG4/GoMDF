@@ -9,7 +9,7 @@ import (
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
-	"github.com/Pramod-Devireddy/go-exprtk"
+	exprgtk "github.com/LincolnG4/go-exprtk"
 )
 
 type Block struct {
@@ -312,7 +312,7 @@ func (a *Algebraic) Apply(sample *[]interface{}) {
 	s := *sample
 
 	//Configure Formula
-	exprtkObj := exprtk.NewExprtk()
+	exprtkObj := exprgtk.NewExprtk()
 	defer exprtkObj.Delete()
 
 	exprtkObj.SetExpression(a.Formula)
