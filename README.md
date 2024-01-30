@@ -32,8 +32,8 @@ func main() {
 	// Access metadata
 	fmt.Println(m.Version())
 	fmt.Println("Version ID --> ", m.MdfVersion())
-	fmt.Println("Start Time NS --> ", m.StartTimeNs())
-	fmt.Println("Start StartTimeLT --> ", m.StartTimeLT())
+	fmt.Println("Start Time NS --> ", m.GetStartTimeNs())
+	fmt.Println("Start StartTimeLT --> ", m.GetStartTimeLT())
 
 	// Get channel samples
 	fmt.Println(m.ChannelNames())
