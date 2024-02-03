@@ -1,6 +1,4 @@
-github.com/Knetic/govaluate v3.0.0+incompatible h1:7o6+MAPhYTCF0+fdvoz1xDedhRb4f6s9Tn1Tt7/WTEg=
-github.com/Knetic/govaluate v3.0.0+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
-github.com/Pramod-Devireddy/go-exprtk v1.1.0 h1:U/uvXm5UMQ25p6PCnThz51WsxDqAeoynzdnhpQEAxZo=
-github.com/Pramod-Devireddy/go-exprtk v1.1.0/go.mod h1:GbqdmGxU1ESDj3lu8mPbffejPB5UoOtm6eB7qr3YZ94=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/soniah/evaler v2.2.0+incompatible h1:0VEcg1WW0PD4eS7JHVSObNw7KYrtNNdtbwKmXpn0+UM=
+github.com/soniah/evaler v2.2.0+incompatible/go.mod h1:OTUTRAJQ39oGv6H40xxaG6rr1Yi3TT1w5Z3qg9EgLKE=
