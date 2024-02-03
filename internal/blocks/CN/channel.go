@@ -54,6 +54,27 @@ type Data struct {
 	LimitExtMax     float64
 }
 
+const (
+	UnsignedIntegerLE uint8 = iota // 0
+	UnsignedIntegerBE              // 1
+	SignedIntegerLE                // 2
+	SignedIntegerBE                // 3
+	IEEE754FloatLE                 // 4
+	IEEE754FloatBE                 // 5
+	StringSBC                      // 6
+	StringUTF8                     // 7
+	StringUTF16LE                  // 8
+	StringUTF16BE                  // 9
+	ByteArrayUnknown               // 10
+	MIMESample                     // 11
+	MIMEStream                     // 12
+	CANopenDate                    // 13
+	CANopenTime                    // 14
+	// Version 4.2
+	ComplexNumberLE // 15
+	ComplexNumberBE // 16
+)
+
 func New(file *os.File, version uint16, startAdress int64) *Block {
 	var b Block
 	var err error
@@ -140,7 +161,7 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 	var dtype interface{}
 
 	switch b.GetDataType() {
-	case 0, 1:
+	case UnsignedIntegerLE, UnsignedIntegerBE:
 		switch lenSize {
 		case 1:
 			dtype = uint8(0)
@@ -151,7 +172,7 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 		case 8:
 			dtype = uint64(0)
 		}
-	case 2, 3:
+	case SignedIntegerLE, SignedIntegerBE:
 		switch lenSize {
 		case 1:
 			dtype = int8(0)
@@ -163,7 +184,7 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 			dtype = int64(0)
 		}
 
-	case 4, 5:
+	case IEEE754FloatLE, IEEE754FloatBE:
 		switch lenSize {
 		case 4:
 			dtype = float32(0)
@@ -171,7 +192,8 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 			dtype = float64(0)
 
 		}
-
+	case StringSBC, StringUTF8, StringUTF16LE, StringUTF16BE:
+		dtype = ""
 	}
 	return dtype
 }

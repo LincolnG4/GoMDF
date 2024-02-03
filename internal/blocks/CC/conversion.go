@@ -41,6 +41,11 @@ type Conversion interface {
 	Apply(*[]interface{})
 }
 
+type Algebraic struct {
+	Info    Info
+	Formula string
+}
+
 type Info struct {
 	Name    string
 	Unit    string
@@ -61,11 +66,6 @@ type Rational struct {
 	P4   float64
 	P5   float64
 	P6   float64
-}
-
-type Algebraic struct {
-	Info    Info
-	Formula string
 }
 
 type ValueValue struct {
@@ -98,6 +98,13 @@ type ValueText struct {
 	Keys    []float64
 	Links   []string
 	Default string
+}
+
+type TextValue struct {
+	Info    Info
+	Values  []float64
+	Keys    []string
+	Default float64
 }
 
 func New(file *os.File, version uint16, startAdress int64) *Block {
@@ -185,7 +192,7 @@ func (b *Block) Get(file *os.File, channelType uint8) Conversion {
 	case blocks.CcVrTLookUp:
 		return b.GetValueRangeToText(file, channelType)
 	case blocks.CcTVLookUp:
-		return nil
+		return b.GetTextToValue(file)
 	case blocks.CcTTLookUp:
 		return nil
 	case blocks.CcBitfield:
@@ -279,6 +286,18 @@ func (b *Block) GetValueRangeToText(file *os.File, channelType uint8) Conversion
 		Links:    t[:len(t)-2],
 		Default:  t[len(t)-1],
 		DataType: channelType,
+	}
+}
+
+func (b *Block) GetTextToValue(file *os.File) Conversion {
+	v := b.getVal()
+	t := b.refToString(file)
+
+	return &TextValue{
+		Info:    b.getInfo(file),
+		Keys:    t,
+		Values:  v[:len(v)-1],
+		Default: v[len(v)-1],
 	}
 }
 
@@ -467,6 +486,23 @@ func (vv ValueValue) withoutInterpolation(sample *[]interface{}) {
 		}
 	}
 
+}
+
+func (tv *TextValue) Apply(sample *[]interface{}) {
+	s := *sample
+
+	keyMap := make(map[string]float64)
+	for j, k := range tv.Keys {
+		keyMap[k] = tv.Values[j]
+	}
+
+	for i := range s {
+		if val, ok := keyMap[s[i].(string)]; ok {
+			s[i] = val
+		} else {
+			s[i] = tv.Default
+		}
+	}
 }
 
 func interpolate(x, x0, x1, y0, y1 float64) float64 {
