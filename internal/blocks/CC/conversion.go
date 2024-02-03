@@ -107,6 +107,13 @@ type TextValue struct {
 	Default float64
 }
 
+type TextText struct {
+	Info    Info
+	Keys    []string
+	Values  []string
+	Default string
+}
+
 func New(file *os.File, version uint16, startAdress int64) *Block {
 	var b Block
 	var err error
@@ -194,7 +201,7 @@ func (b *Block) Get(file *os.File, channelType uint8) Conversion {
 	case blocks.CcTVLookUp:
 		return b.GetTextToValue(file)
 	case blocks.CcTTLookUp:
-		return nil
+		return b.GetTextToText(file)
 	case blocks.CcBitfield:
 		return nil
 	default:
@@ -216,7 +223,7 @@ func (b *Block) GetLinear(file *os.File) Conversion {
 // GetVVInterporlation returns value to value tabular look-up with interpolation
 func (b *Block) GetValueToValue(file *os.File) Conversion {
 	v := b.getVal()
-	key, value := createKeyValue(&v)
+	key, value := createKeyValueFloat64(&v)
 	return &ValueValue{
 		Info:   b.getInfo(file),
 		Keys:   key,
@@ -276,7 +283,7 @@ func (b *Block) GetValueToText(file *os.File) Conversion {
 
 func (b *Block) GetValueRangeToText(file *os.File, channelType uint8) Conversion {
 	v := b.getVal()
-	min, max := createKeyValue(&v)
+	min, max := createKeyValueFloat64(&v)
 	t := b.refToString(file)
 
 	return &ValueRangeToText{
@@ -298,6 +305,18 @@ func (b *Block) GetTextToValue(file *os.File) Conversion {
 		Keys:    t,
 		Values:  v[:len(v)-1],
 		Default: v[len(v)-1],
+	}
+}
+
+func (b *Block) GetTextToText(file *os.File) Conversion {
+	t := b.refToString(file)
+	k := t[:len(t)-1]
+	key, value := createKeyValueString(&k)
+	return &TextText{
+		Info:    b.getInfo(file),
+		Keys:    key,
+		Values:  value,
+		Default: t[len(t)-1],
 	}
 }
 
@@ -505,6 +524,22 @@ func (tv *TextValue) Apply(sample *[]interface{}) {
 	}
 }
 
+func (tt *TextText) Apply(sample *[]interface{}) {
+	s := *sample
+	keyMap := make(map[string]string)
+	for j, k := range tt.Keys {
+		keyMap[k] = tt.Values[j]
+	}
+
+	for i, v := range s {
+		if val, ok := keyMap[v.(string)]; ok {
+			s[i] = val
+		} else {
+			s[i] = tt.Default
+		}
+	}
+}
+
 func interpolate(x, x0, x1, y0, y1 float64) float64 {
 	return y0 + (((x - x0) * (y1 - y0)) / (x1 - x0))
 }
@@ -521,11 +556,30 @@ func convertToFloat64(value interface{}) float64 {
 	}
 }
 
-func createKeyValue(val *[]float64) ([]float64, []float64) {
+func createKeyValueFloat64(val *[]float64) ([]float64, []float64) {
 	v := *val
 	lenV := len(v) / 2
 	keys := make([]float64, lenV)
 	vals := make([]float64, lenV)
+
+	j, k := 0, 0
+	for i := 0; i < len(v); i++ {
+		if i%2 == 0 {
+			keys[j] = v[i]
+			j++
+		} else {
+			vals[k] = v[i]
+			k++
+		}
+	}
+	return keys, vals
+}
+
+func createKeyValueString(val *[]string) ([]string, []string) {
+	v := *val
+	lenV := len(v) / 2
+	keys := make([]string, lenV)
+	vals := make([]string, lenV)
 
 	j, k := 0, 0
 	for i := 0; i < len(v); i++ {
