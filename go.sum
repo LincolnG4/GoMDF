@@ -1,4 +1,4 @@
-github.com/LincolnG4/go-exprtk v0.0.2 h1:PTQ+2GKf+VjPGPInu6o7bXJJFMudL/F64BGHi6RLYMc=
-github.com/LincolnG4/go-exprtk v0.0.2/go.mod h1:gXBqure9Z9+9ctZqK8ORn7OPgwSE4HthEJF3y8cfrgs=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/soniah/evaler v2.2.0+incompatible h1:0VEcg1WW0PD4eS7JHVSObNw7KYrtNNdtbwKmXpn0+UM=
+github.com/soniah/evaler v2.2.0+incompatible/go.mod h1:OTUTRAJQ39oGv6H40xxaG6rr1Yi3TT1w5Z3qg9EgLKE=

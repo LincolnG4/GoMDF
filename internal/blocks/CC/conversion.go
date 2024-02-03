@@ -9,7 +9,7 @@ import (
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 	"github.com/LincolnG4/GoMDF/internal/blocks/TX"
-	exprgtk "github.com/LincolnG4/go-exprtk"
+	"github.com/soniah/evaler"
 )
 
 type Block struct {
@@ -305,28 +305,21 @@ func (r *Rational) Apply(sample *[]interface{}) {
 
 // Interporlation formula
 func (a *Algebraic) Apply(sample *[]interface{}) {
-	var result interface{}
-	var err error
 	var x string = "X"
 
 	s := *sample
 
 	//Configure Formula
-	exprtkObj := exprgtk.NewExprtk()
-	defer exprtkObj.Delete()
-
-	exprtkObj.SetExpression(a.Formula)
-	exprtkObj.AddDoubleVariable(x)
-	err = exprtkObj.CompileExpression()
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
+	m := make(map[string]string)
 
 	for i, v := range s {
 		c := convertToFloat64(v)
-		exprtkObj.SetDoubleVariableValue(x, c)
-		result = exprtkObj.GetEvaluatedValue()
+		m[x] = fmt.Sprintf("%f", c)
+		r, err := evaler.EvalWithVariables(a.Formula, m)
+		if err != nil {
+			fmt.Println("error to convert formula")
+		}
+		result := evaler.BigratToFloat(r)
 		s[i] = result
 	}
 }
