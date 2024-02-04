@@ -101,6 +101,30 @@ func GetHeader(file *os.File, startAdress int64, blockID string) (Header, error)
 	return head, nil
 }
 
+func GetBlockType(file *os.File, startAdress int64) (Header, error) {
+	var blockSize uint64 = HeaderSize
+
+	head := Header{}
+
+	_, errs := file.Seek(startAdress, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "memory addr out of size")
+		}
+	}
+
+	//Create a buffer based on blocksize
+	buf := LoadBuffer(file, blockSize)
+
+	//Read header
+	BinaryError := binary.Read(buf, binary.LittleEndian, &head)
+	if BinaryError != nil {
+		return Header{}, fmt.Errorf("invalid block")
+	}
+
+	return head, nil
+}
+
 func CalculateLinkSize(linkCount uint64) uint64 {
 	return linkCount * uint64(LinkSize)
 }

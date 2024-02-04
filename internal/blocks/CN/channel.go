@@ -141,8 +141,8 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 // GetConversion return Conversion structs that hold the formula to convert
 // raw sample to desired value.
-func (b *Block) GetConversion(file *os.File, version uint16, channelDataType uint8) CC.Conversion {
-	cc := b.NewConversion(file, version)
+func (b *Block) GetConversion(file *os.File, channelDataType uint8) CC.Conversion {
+	cc := b.NewConversion(file)
 	if cc == nil {
 		return nil
 	}
@@ -150,11 +150,11 @@ func (b *Block) GetConversion(file *os.File, version uint16, channelDataType uin
 }
 
 // NewConversion create a new CCBlock according to the Link.CcConvertion field.
-func (b *Block) NewConversion(file *os.File, version uint16) *CC.Block {
+func (b *Block) NewConversion(file *os.File) *CC.Block {
 	if b.Link.CcConvertion == 0 {
 		return nil
 	}
-	return CC.New(file, version, b.Link.CcConvertion)
+	return CC.New(file, b.Link.CcConvertion)
 }
 
 func (b *Block) LoadDataType(lenSize int) interface{} {

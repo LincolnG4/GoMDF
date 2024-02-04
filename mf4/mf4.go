@@ -98,7 +98,7 @@ func (m *MF4) read() {
 					DataGroup:    dataGroupBlock,
 					Block:        cnBlock,
 					SourceInfo:   SI.Get(file, version, cnBlock.Link.SiSource),
-					Convertion:   cnBlock.GetConversion(m.File, version, cnBlock.GetDataType()),
+					Convertion:   cnBlock.GetConversion(m.File, cnBlock.GetDataType()),
 				}
 
 				channelGroup.Channels[cn.Name] = cn
