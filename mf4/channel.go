@@ -56,11 +56,21 @@ func (c *Channel) readSingleDataBlock(file *os.File) ([]interface{}, error) {
 	for i := uint64(0); i < cg.Data.CycleCount; i += 1 {
 		seekRead(file, readAddr, data)
 		buf := bytes.NewBuffer(data)
-		err := binary.Read(buf, byteOrder, sliceElem)
-		if err != nil {
-			return nil, fmt.Errorf("error during parsing channel: %s ", err)
+		// Handle string separately
+		if _, isString := dtype.(string); isString {
+			strBytes, err := buf.ReadBytes(0) // Assuming strings are NULL-terminated
+			if err != nil {
+				return nil, fmt.Errorf("error during parsing channel: %s", err)
+			}
+			sample = append(sample, string(strBytes[:len(strBytes)-1]))
+		} else {
+			err := binary.Read(buf, byteOrder, sliceElem)
+			if err != nil {
+				return nil, fmt.Errorf("error during parsing channel: %s", err)
+			}
+			sample = append(sample, reflect.ValueOf(sliceElem).Elem().Interface())
 		}
-		sample = append(sample, reflect.ValueOf(sliceElem).Elem().Interface())
+
 		readAddr += rowSize
 	}
 
