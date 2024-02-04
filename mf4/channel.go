@@ -3,6 +3,7 @@ package mf4
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -63,6 +64,16 @@ func (c *Channel) readSingleDataBlock(file *os.File) ([]interface{}, error) {
 				return nil, fmt.Errorf("error during parsing channel: %s", err)
 			}
 			sample = append(sample, string(strBytes[:len(strBytes)-1]))
+		}
+		if _, isString := dtype.([]uint8); isString {
+			byteArray := make([]byte, buf.Len())
+			_, err := io.ReadFull(buf, byteArray) // Read all bytes into the array
+			if err != nil {
+				return nil, fmt.Errorf("error during parsing channel: %s", err)
+			}
+			encodedString := hex.EncodeToString(byteArray)
+
+			fmt.Println(encodedString)
 		} else {
 			err := binary.Read(buf, byteOrder, sliceElem)
 			if err != nil {
@@ -70,7 +81,6 @@ func (c *Channel) readSingleDataBlock(file *os.File) ([]interface{}, error) {
 			}
 			sample = append(sample, reflect.ValueOf(sliceElem).Elem().Interface())
 		}
-
 		readAddr += rowSize
 	}
 

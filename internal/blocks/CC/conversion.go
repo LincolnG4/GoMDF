@@ -587,7 +587,7 @@ func (tt *TextText) Apply(sample *[]interface{}) {
 }
 
 func (bt *BitfieldText) Apply(sample *[]interface{}) {
-	fmt.Println("bitfieldText convertion is not ready on the package, open a pull request")
+	fmt.Println("bitfieldtext convertion is not ready on the package, open a pull request")
 }
 
 func interpolate(x, x0, x1, y0, y1 float64) float64 {

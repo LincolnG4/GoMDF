@@ -171,6 +171,8 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 			dtype = uint32(0)
 		case 8:
 			dtype = uint64(0)
+		default:
+			dtype = uint64(0)
 		}
 	case SignedIntegerLE, SignedIntegerBE:
 		switch lenSize {
@@ -182,6 +184,8 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 			dtype = int32(0)
 		case 8:
 			dtype = int64(0)
+		default:
+			dtype = int64(0)
 		}
 
 	case IEEE754FloatLE, IEEE754FloatBE:
@@ -190,10 +194,13 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 			dtype = float32(0)
 		case 8:
 			dtype = float64(0)
-
+		default:
+			dtype = float64(0)
 		}
 	case StringSBC, StringUTF8, StringUTF16LE, StringUTF16BE:
 		dtype = ""
+	case ByteArrayUnknown:
+		dtype = []byte{}
 	}
 	return dtype
 }
