@@ -164,14 +164,14 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 	// if cn.IsAllValuesInvalid() {
 	// 	return nil, fmt.Errorf("channel %s has invalid read", channelName)
 	// }
+
 	dataHeader, err := blocks.GetHeaderWithoutValidation(file, dg.Link.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	dataBlockType := string(dataHeader.ID[:])
-
-	switch dataBlockType {
+	blockHeader := string(dataHeader.ID[:])
+	switch blockHeader {
 	case blocks.DtID, blocks.DvID:
 		sample, err = cn.readSingleDataBlock(file)
 	case blocks.DlID:

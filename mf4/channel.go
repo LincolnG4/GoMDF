@@ -28,6 +28,7 @@ type Channel struct {
 	MdComment    string
 }
 
+// parseSignalMeasure decode signal sample based on data type
 func parseSignalMeasure(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
 	switch dataType.(type) {
 	case string:
@@ -52,6 +53,7 @@ func parseSignalMeasure(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType 
 	}
 }
 
+// readMeasure return extract sample measure from DTBlock//DLBlock
 func (c *Channel) readMeasure(file *os.File, version uint16, isDataList bool) ([]interface{}, error) {
 	// init
 	cn := c.Block
@@ -113,10 +115,12 @@ func (c *Channel) readMeasure(file *os.File, version uint16, isDataList bool) ([
 	return measure, nil
 }
 
+// readSingleDataBlock returns measure from DTBlock
 func (c *Channel) readSingleDataBlock(file *os.File) ([]interface{}, error) {
 	return c.readMeasure(file, 0, false)
 }
 
+// readDataList returns measure from DLBlock
 func (c *Channel) readDataList(file *os.File, version uint16) ([]interface{}, error) {
 	return c.readMeasure(file, version, true)
 }
