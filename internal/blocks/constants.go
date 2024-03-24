@@ -14,6 +14,7 @@ const (
 	ChID = "##CH"
 	CnID = "##CN"
 	DgID = "##DG"
+	DlID = "##DL"
 	DtID = "##DT"
 	DvID = "##DV"
 	EvID = "##EV"

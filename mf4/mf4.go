@@ -11,7 +11,6 @@ import (
 	"github.com/LincolnG4/GoMDF/internal/blocks/CG"
 	"github.com/LincolnG4/GoMDF/internal/blocks/CN"
 	"github.com/LincolnG4/GoMDF/internal/blocks/DG"
-	"github.com/LincolnG4/GoMDF/internal/blocks/DT"
 	"github.com/LincolnG4/GoMDF/internal/blocks/EV"
 	"github.com/LincolnG4/GoMDF/internal/blocks/FH"
 	"github.com/LincolnG4/GoMDF/internal/blocks/HD"
@@ -165,14 +164,22 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 	// if cn.IsAllValuesInvalid() {
 	// 	return nil, fmt.Errorf("channel %s has invalid read", channelName)
 	// }
-
-	dataRecordBlock := DT.New(file, dg.Link.Data)
-
-	if dataRecordBlock.DataBlockType() == blocks.DtID || dataRecordBlock.DataBlockType() == blocks.DvID {
-		sample, err = cn.readSingleDataBlock(file)
-	} else {
-		fmt.Println("package not ready to read")
+	dataHeader, err := blocks.GetHeaderWithoutValidation(file, dg.Link.Data)
+	if err != nil {
+		return nil, err
 	}
+
+	dataBlockType := string(dataHeader.ID[:])
+
+	switch dataBlockType {
+	case blocks.DtID, blocks.DvID:
+		sample, err = cn.readSingleDataBlock(file)
+	case blocks.DlID:
+		sample, err = cn.readDataList(file, m.MdfVersion())
+	default:
+		return nil, fmt.Errorf("package not ready to read this file")
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -186,10 +193,6 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 // The function iterates through the linked list of events, creating EV instances
 // and handling event details such as names, comments, and scopes.
 // If errors occur during EV instance creation, they are printed to the console.
-//
-// Parameters:
-//
-//	m: A pointer to the MF4 instance containing events.
 func (m *MF4) loadEvents() {
 	if m.getFirstEvent() == 0 {
 		return

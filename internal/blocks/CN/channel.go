@@ -158,8 +158,7 @@ func (b *Block) NewConversion(file *os.File) *CC.Block {
 }
 
 func (b *Block) LoadDataType(lenSize int) interface{} {
-	var dtype interface{}
-
+	var dtype interface{} = 0
 	switch b.GetDataType() {
 	case UnsignedIntegerLE, UnsignedIntegerBE:
 		switch lenSize {
@@ -205,11 +204,21 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 	return dtype
 }
 
-func (b *Block) IsLittleEndian() bool {
-	//Data Types that are Little Endian: 0, 2, 4, 8, 15
-	littleEndianFormats := []int{0, 2, 4, 8, 15}
+func LittleEndianArray() []int {
+	return []int{0, 2, 4, 8, 15}
+}
 
-	return slices.Contains(littleEndianFormats, int(b.GetDataType()))
+func (b *Block) ByteOrder() binary.ByteOrder {
+	//Data Types that are Little Endian: 0, 2, 4, 8, 15
+	if slices.Contains(LittleEndianArray(), int(b.GetDataType())) {
+		return binary.LittleEndian
+	}
+	return binary.BigEndian
+}
+
+// LengthSignalInRow is number of Bytes required to store (cn_bit_count + cn_bit_offset) bits
+func (b *Block) SignalBytesRange() uint32 {
+	return (b.Data.BitCount + uint32(b.Data.BitOffset)) / 8
 }
 
 func (b *Block) IsComposed() bool {

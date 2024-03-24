@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -14,6 +13,7 @@ import (
 	"github.com/LincolnG4/GoMDF/internal/blocks/CG"
 	"github.com/LincolnG4/GoMDF/internal/blocks/CN"
 	"github.com/LincolnG4/GoMDF/internal/blocks/DG"
+	"github.com/LincolnG4/GoMDF/internal/blocks/DL"
 	"github.com/LincolnG4/GoMDF/internal/blocks/SI"
 )
 
@@ -28,63 +28,102 @@ type Channel struct {
 	MdComment    string
 }
 
-func (c *Channel) readSingleDataBlock(file *os.File) ([]interface{}, error) {
-	var byteOrder binary.ByteOrder
+func parseSignalMeasure(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
+	switch dataType.(type) {
+	case string:
+		strBytes, err := buf.ReadBytes(0) // Assuming strings are NULL-terminated
+		if err != nil {
+			return nil, err
+		}
+		return string(strBytes[:len(strBytes)-1]), nil
+	case []uint8:
+		byteArray := make([]byte, buf.Len())
+		_, err := io.ReadFull(buf, byteArray) // Read all bytes into the array
+		if err != nil {
+			return nil, err
+		}
+		return hex.EncodeToString(byteArray), nil
+	default:
+		value := reflect.New(reflect.TypeOf(dataType)).Interface()
+		if err := binary.Read(buf, byteOrder, value); err != nil {
+			return nil, err
+		}
+		return reflect.ValueOf(value).Elem().Interface(), nil
+	}
+}
 
+func (c *Channel) readMeasure(file *os.File, version uint16, isDataList bool) ([]interface{}, error) {
+	// init
 	cn := c.Block
 	cg := c.ChannelGroup
-	dg := c.DataGroup
 
-	readAddr := int64(blocks.HeaderSize) + dg.Link.Data + int64(dg.GetRecordIDSize()) + int64(cn.Data.ByteOffset)
-	size := (cn.Data.BitCount + uint32(cn.Data.BitOffset)) / 8
-	data := make([]byte, size)
-	sample := make([]interface{}, 0)
+	var dtl *DL.Block
+	var err error
+	var readAddr int64
 
+	if isDataList {
+		dtl, err = DL.New(file, version, c.DataGroup.Link.Data)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		readAddr = c.signalValueAddress(c.DataGroup.Link.Data)
+	}
+
+	// byte slice order convert
+	byteOrder := cn.ByteOrder()
+
+	// get config
+	size := cn.SignalBytesRange()
 	rowSize := int64(cg.Data.DataBytes)
 
-	if cn.IsLittleEndian() {
-		byteOrder = binary.LittleEndian
-	} else {
-		byteOrder = binary.BigEndian
-	}
+	data := make([]byte, size)
+	measure := make([]interface{}, 0)
 
-	dtype := cn.LoadDataType(len(data))
+	dataType := cn.LoadDataType(len(data))
 
-	// Create a new instance of the data type using reflection
-	sliceElemType := reflect.TypeOf(dtype)
-	sliceElem := reflect.New(sliceElemType).Interface()
+	var offset, target uint64
+	k := 0
+	for i := uint64(0); i < c.ChannelGroup.Data.CycleCount; i++ {
+		if i == target && isDataList {
+			// Next list
+			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
+				dtl, err = DL.New(file, version, dtl.Next())
+				if err != nil {
+					return nil, err
+				}
+				k = 0
+			}
+			//Next Data
+			offset = dtl.DataSectionLength(k)
+			target += offset
+			readAddr = c.signalValueAddress(dtl.Link.Data[k])
+			k += 1
+		}
 
-	for i := uint64(0); i < cg.Data.CycleCount; i += 1 {
 		seekRead(file, readAddr, data)
 		buf := bytes.NewBuffer(data)
-		// Handle string separately
-		if _, isString := dtype.(string); isString {
-			strBytes, err := buf.ReadBytes(0) // Assuming strings are NULL-terminated
-			if err != nil {
-				return nil, fmt.Errorf("error during parsing channel: %s", err)
-			}
-			sample = append(sample, string(strBytes[:len(strBytes)-1]))
+		value, err := parseSignalMeasure(buf, byteOrder, dataType)
+		if err != nil {
+			return nil, err
 		}
-		if _, isString := dtype.([]uint8); isString {
-			byteArray := make([]byte, buf.Len())
-			_, err := io.ReadFull(buf, byteArray) // Read all bytes into the array
-			if err != nil {
-				return nil, fmt.Errorf("error during parsing channel: %s", err)
-			}
-			encodedString := hex.EncodeToString(byteArray)
-
-			fmt.Println(encodedString)
-		} else {
-			err := binary.Read(buf, byteOrder, sliceElem)
-			if err != nil {
-				return nil, fmt.Errorf("error during parsing channel: %s", err)
-			}
-			sample = append(sample, reflect.ValueOf(sliceElem).Elem().Interface())
-		}
+		measure = append(measure, value)
 		readAddr += rowSize
 	}
+	return measure, nil
+}
 
-	return sample, nil
+func (c *Channel) readSingleDataBlock(file *os.File) ([]interface{}, error) {
+	return c.readMeasure(file, 0, false)
+}
+
+func (c *Channel) readDataList(file *os.File, version uint16) ([]interface{}, error) {
+	return c.readMeasure(file, version, true)
+}
+
+// signalValueAddress returns the offset from the signal in the DTBlock
+func (c *Channel) signalValueAddress(dataAddress int64) int64 {
+	return int64(blocks.HeaderSize) + dataAddress + int64(c.DataGroup.GetRecordIDSize()) + int64(c.Block.Data.ByteOffset)
 }
 
 func (c *Channel) applyConvertion(sample *[]interface{}) {
