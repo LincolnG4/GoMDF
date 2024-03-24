@@ -88,16 +88,16 @@ type ValueRangeToText struct {
 	Info     Info
 	KeyMin   []float64
 	KeyMax   []float64
-	Links    []string
-	Default  string
+	Links    []interface{}
+	Default  interface{}
 	DataType uint8
 }
 
 type ValueText struct {
 	Info    Info
 	Keys    []float64
-	Links   []string
-	Default string
+	Links   []interface{}
+	Default interface{}
 }
 
 type TextValue struct {
@@ -114,7 +114,13 @@ type TextText struct {
 	Default string
 }
 
-func New(file *os.File, version uint16, startAdress int64) *Block {
+type BitfieldText struct {
+	Info    Info
+	Bitmask []float64
+	Links   []float64
+}
+
+func New(file *os.File, startAdress int64) *Block {
 	var b Block
 	var err error
 
@@ -203,7 +209,7 @@ func (b *Block) Get(file *os.File, channelType uint8) Conversion {
 	case blocks.CcTTLookUp:
 		return b.GetTextToText(file)
 	case blocks.CcBitfield:
-		return nil
+		return b.GetBitfield(file)
 	default:
 		return nil
 	}
@@ -265,7 +271,7 @@ func (b *Block) GetAlgebraic(file *os.File) Conversion {
 	formula := b.refToString(file)
 	return &Algebraic{
 		Info:    b.getInfo(file),
-		Formula: formula[0],
+		Formula: formula[0].(string),
 	}
 }
 
@@ -285,7 +291,6 @@ func (b *Block) GetValueRangeToText(file *os.File, channelType uint8) Conversion
 	v := b.getVal()
 	min, max := createKeyValueFloat64(&v)
 	t := b.refToString(file)
-
 	return &ValueRangeToText{
 		Info:     b.getInfo(file),
 		KeyMin:   min,
@@ -299,10 +304,10 @@ func (b *Block) GetValueRangeToText(file *os.File, channelType uint8) Conversion
 func (b *Block) GetTextToValue(file *os.File) Conversion {
 	v := b.getVal()
 	t := b.refToString(file)
-
+	keys := interfaceArrayToStringArray(t)
 	return &TextValue{
 		Info:    b.getInfo(file),
-		Keys:    t,
+		Keys:    keys,
 		Values:  v[:len(v)-1],
 		Default: v[len(v)-1],
 	}
@@ -311,12 +316,24 @@ func (b *Block) GetTextToValue(file *os.File) Conversion {
 func (b *Block) GetTextToText(file *os.File) Conversion {
 	t := b.refToString(file)
 	k := t[:len(t)-1]
-	key, value := createKeyValueString(&k)
+
+	keys := interfaceArrayToStringArray(k)
+	key, value := createKeyValueString(&keys)
 	return &TextText{
 		Info:    b.getInfo(file),
 		Keys:    key,
 		Values:  value,
-		Default: t[len(t)-1],
+		Default: t[len(t)-1].(string),
+	}
+}
+
+func (b *Block) GetBitfield(file *os.File) Conversion {
+	v := b.getVal()
+	t := b.refToString(file)
+
+	fmt.Println(t, v)
+	return &BitfieldText{
+		Info: b.getInfo(file),
 	}
 }
 
@@ -370,10 +387,25 @@ func (vt *ValueText) Apply(sample *[]interface{}) {
 
 		for j := 0; j < len(vt.Keys)-1; j++ {
 			if c == vt.Keys[j] {
-				s[i] = vt.Links[j]
+				switch v := vt.Links[j].(type) {
+				case string:
+					s[i] = vt.Links[j]
+				case Conversion:
+					a := []interface{}{c}
+					v.Apply(&a)
+					s[i] = a[0]
+				}
 				break
 			}
-			s[i] = vt.Default
+
+			switch v := vt.Default.(type) {
+			case string:
+				s[i] = vt.Default
+			case Conversion:
+				a := []interface{}{c}
+				v.Apply(&a)
+				s[i] = a[0]
+			}
 		}
 	}
 }
@@ -397,13 +429,27 @@ func (vt *ValueRangeToText) Apply(sample *[]interface{}) {
 
 	for i, v := range s {
 		c := convertToFloat64(v)
-
 		index := sort.Search(n, f)
 
 		if index != n && c >= vt.KeyMin[index] {
-			s[i] = vt.Links[index]
+			switch v := vt.Links[index].(type) {
+			case string:
+				s[i] = v
+			case Conversion:
+				a := []interface{}{c}
+				v.Apply(&a)
+				s[i] = a[0]
+			}
+
 		} else {
-			s[i] = vt.Default
+			switch v := vt.Default.(type) {
+			case string:
+				s[i] = v
+			case Conversion:
+				a := []interface{}{c}
+				v.Apply(&a)
+				s[i] = a[0]
+			}
 		}
 	}
 }
@@ -540,6 +586,10 @@ func (tt *TextText) Apply(sample *[]interface{}) {
 	}
 }
 
+func (bt *BitfieldText) Apply(sample *[]interface{}) {
+	fmt.Println("bitfieldtext convertion is not ready on the package, open a pull request")
+}
+
 func interpolate(x, x0, x1, y0, y1 float64) float64 {
 	return y0 + (((x - x0) * (y1 - y0)) / (x1 - x0))
 }
@@ -622,23 +672,41 @@ func (b *Block) getInfo(file *os.File) Info {
 	}
 }
 
-func (b *Block) refToString(file *os.File) []string {
-	var text string
-	var err error
+func (b *Block) refToString(file *os.File) []interface{} {
+	var result interface{}
 
 	ref := b.getRef()
-	r := make([]string, 0)
+	r := make([]interface{}, 0)
 
 	for i := 0; i < len(ref); i++ {
-		text, err = TX.GetText(file, ref[i])
+		header, err := blocks.GetBlockType(file, ref[i])
 		if err != nil {
-			return []string{}
+			return nil
 		}
-		r = append(r, text)
+		hId := string(header.ID[:])
+		if hId == blocks.TxID || hId == blocks.MdID {
+			result, err = TX.GetText(file, ref[i])
+			if err != nil {
+				return nil
+			}
+		}
+		if hId == blocks.CcID {
+			cc := New(file, ref[i])
+			result = cc.Get(file, blocks.CcVrTLookUp)
+		}
+
+		r = append(r, result)
 	}
 	return r
 }
 
+func interfaceArrayToStringArray(interfaceArray []interface{}) []string {
+	stringArray := make([]string, len(interfaceArray))
+	for i, v := range interfaceArray {
+		stringArray[i] = v.(string)
+	}
+	return stringArray
+}
 func (b *Block) getVal() []float64 {
 	return b.Data.Val
 }

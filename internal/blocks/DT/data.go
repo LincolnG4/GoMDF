@@ -49,8 +49,8 @@ func (b *Block) BlankBlock() *Block {
 		Header: blocks.Header{
 			ID:        blocks.SplitIdToArray(blocks.DtID),
 			Reserved:  [4]byte{},
-			Length:    64,
-			LinkCount: 4,
+			Length:    24,
+			LinkCount: 0,
 		},
 		Data: []byte{},
 	}

@@ -89,13 +89,61 @@ func GetHeader(file *os.File, startAdress int64, blockID string) (Header, error)
 	buf := LoadBuffer(file, blockSize)
 
 	//Read header
-	BinaryError := binary.Read(buf, binary.LittleEndian, &head)
-	if BinaryError != nil {
+	err := binary.Read(buf, binary.LittleEndian, &head)
+	if err != nil {
 		return Header{}, fmt.Errorf("invalid block")
 	}
 
 	if string(head.ID[:]) != blockID {
 		return Header{}, fmt.Errorf("invalid block id")
+	}
+
+	return head, nil
+}
+
+func GetHeaderWithoutValidation(file *os.File, startAdress int64) (Header, error) {
+	var blockSize uint64 = HeaderSize
+
+	head := Header{}
+
+	_, errs := file.Seek(startAdress, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "memory addr out of size")
+		}
+	}
+
+	//Create a buffer based on blocksize
+	buf := LoadBuffer(file, blockSize)
+
+	//Read header
+	err := binary.Read(buf, binary.LittleEndian, &head)
+	if err != nil {
+		return Header{}, fmt.Errorf("invalid block")
+	}
+
+	return head, nil
+}
+
+func GetBlockType(file *os.File, startAdress int64) (Header, error) {
+	var blockSize uint64 = HeaderSize
+
+	head := Header{}
+
+	_, errs := file.Seek(startAdress, 0)
+	if errs != nil {
+		if errs != io.EOF {
+			fmt.Println(errs, "memory addr out of size")
+		}
+	}
+
+	//Create a buffer based on blocksize
+	buf := LoadBuffer(file, blockSize)
+
+	//Read header
+	BinaryError := binary.Read(buf, binary.LittleEndian, &head)
+	if BinaryError != nil {
+		return Header{}, fmt.Errorf("invalid block")
 	}
 
 	return head, nil

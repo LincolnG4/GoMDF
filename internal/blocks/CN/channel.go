@@ -141,8 +141,8 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 // GetConversion return Conversion structs that hold the formula to convert
 // raw sample to desired value.
-func (b *Block) GetConversion(file *os.File, version uint16, channelDataType uint8) CC.Conversion {
-	cc := b.NewConversion(file, version)
+func (b *Block) GetConversion(file *os.File, channelDataType uint8) CC.Conversion {
+	cc := b.NewConversion(file)
 	if cc == nil {
 		return nil
 	}
@@ -150,16 +150,15 @@ func (b *Block) GetConversion(file *os.File, version uint16, channelDataType uin
 }
 
 // NewConversion create a new CCBlock according to the Link.CcConvertion field.
-func (b *Block) NewConversion(file *os.File, version uint16) *CC.Block {
+func (b *Block) NewConversion(file *os.File) *CC.Block {
 	if b.Link.CcConvertion == 0 {
 		return nil
 	}
-	return CC.New(file, version, b.Link.CcConvertion)
+	return CC.New(file, b.Link.CcConvertion)
 }
 
 func (b *Block) LoadDataType(lenSize int) interface{} {
-	var dtype interface{}
-
+	var dtype interface{} = 0
 	switch b.GetDataType() {
 	case UnsignedIntegerLE, UnsignedIntegerBE:
 		switch lenSize {
@@ -170,6 +169,8 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 		case 4:
 			dtype = uint32(0)
 		case 8:
+			dtype = uint64(0)
+		default:
 			dtype = uint64(0)
 		}
 	case SignedIntegerLE, SignedIntegerBE:
@@ -182,6 +183,8 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 			dtype = int32(0)
 		case 8:
 			dtype = int64(0)
+		default:
+			dtype = int64(0)
 		}
 
 	case IEEE754FloatLE, IEEE754FloatBE:
@@ -190,19 +193,32 @@ func (b *Block) LoadDataType(lenSize int) interface{} {
 			dtype = float32(0)
 		case 8:
 			dtype = float64(0)
-
+		default:
+			dtype = float64(0)
 		}
 	case StringSBC, StringUTF8, StringUTF16LE, StringUTF16BE:
 		dtype = ""
+	case ByteArrayUnknown:
+		dtype = []byte{}
 	}
 	return dtype
 }
 
-func (b *Block) IsLittleEndian() bool {
-	//Data Types that are Little Endian: 0, 2, 4, 8, 15
-	littleEndianFormats := []int{0, 2, 4, 8, 15}
+func LittleEndianArray() []int {
+	return []int{0, 2, 4, 8, 15}
+}
 
-	return slices.Contains(littleEndianFormats, int(b.GetDataType()))
+func (b *Block) ByteOrder() binary.ByteOrder {
+	//Data Types that are Little Endian: 0, 2, 4, 8, 15
+	if slices.Contains(LittleEndianArray(), int(b.GetDataType())) {
+		return binary.LittleEndian
+	}
+	return binary.BigEndian
+}
+
+// LengthSignalInRow is number of Bytes required to store (cn_bit_count + cn_bit_offset) bits
+func (b *Block) SignalBytesRange() uint32 {
+	return (b.Data.BitCount + uint32(b.Data.BitOffset)) / 8
 }
 
 func (b *Block) IsComposed() bool {

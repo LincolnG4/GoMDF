@@ -38,10 +38,10 @@ type Data struct {
 	// or changed it most recently.
 	CreatorIndex uint16
 	Reserved     [4]byte
-	//128-bit value for MD5 check sum. Only valid if "MD5 check sum valid"
+	// 128-bit value for MD5 check sum. Only valid if "MD5 check sum valid"
 	// flag (bit 2) is set.
 	MD5Checksum [16]byte
-	//Original data size in Bytes, i.e. either for external file or for
+	// Original data size in Bytes, i.e. either for external file or for
 	// compressed data.
 	OriginalSize uint64
 
