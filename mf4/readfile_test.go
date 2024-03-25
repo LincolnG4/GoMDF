@@ -12,7 +12,7 @@ type TestCase struct {
 	file            *os.File
 	expectedChannel []string
 	expectedSample  []int64
-	expectedVersion string
+	expectedVersion uint16
 }
 
 func loadSimpleTestCase() TestCase {
@@ -21,11 +21,11 @@ func loadSimpleTestCase() TestCase {
 		file:            file,
 		expectedChannel: []string{"channel_b", "channel_c", "time", "channel_a"},
 		expectedSample:  []int64{5, 10, 0, 10, 5, 10, 10, 5, 0, 0, 10, 5, 10, 5, 10, 0, 0, 5, 5, 0},
-		expectedVersion: "4.10",
+		expectedVersion: 410,
 	}
 }
 
-func TesReadFile(t *testing.T) {
+func TestReadFile(t *testing.T) {
 	testcase := loadSimpleTestCase()
 
 	_, err := mf4.ReadFile(testcase.file)
@@ -34,13 +34,13 @@ func TesReadFile(t *testing.T) {
 	}
 }
 
-func TesReadBasicInformations(t *testing.T) {
+func TestReadBasicInformations(t *testing.T) {
 	testcase := loadSimpleTestCase()
 
 	m, _ := mf4.ReadFile(testcase.file)
-	value := m.Version()
+	value := m.MdfVersion()
 	if value != testcase.expectedVersion {
-		t.Fatalf(`wrong version: expected %s, found %s`, testcase.expectedVersion, value)
+		t.Fatalf(`wrong version: expected %d, found %d`, testcase.expectedVersion, value)
 	}
 }
 
