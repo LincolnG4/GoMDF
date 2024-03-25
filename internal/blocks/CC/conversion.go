@@ -596,7 +596,23 @@ func interpolate(x, x0, x1, y0, y1 float64) float64 {
 
 func convertToFloat64(value interface{}) float64 {
 	switch v := value.(type) {
-	case int:
+	case uint8:
+		return float64(v)
+	case uint16:
+		return float64(v)
+	case uint32:
+		return float64(v)
+	case uint64:
+		return float64(v)
+	case int8:
+		return float64(v)
+	case int16:
+		return float64(v)
+	case int32:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case float32:
 		return float64(v)
 	case float64:
 		return v
