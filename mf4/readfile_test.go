@@ -1,56 +1,81 @@
-package mf4
+package mf4_test
 
 import (
-	"io/fs"
 	"os"
-	"reflect"
+	"slices"
 	"testing"
+
+	"github.com/LincolnG4/GoMDF/mf4"
 )
 
-func SampleFiles() []fs.DirEntry {
-	items, _ := os.ReadDir("./samples")
-	return items
+type TestCase struct {
+	file            *os.File
+	expectedChannel []string
+	expectedSample  []int64
+	expectedVersion string
 }
 
-func TestReadSample(t *testing.T) {
-	file, err := os.Open("/home/lincolng/Documents/Code/GO/ASAMMDF/GoMDF/samples/sample4.mf4")
-	if err != nil {
-		t.Fatalf(`could not open file %v`, err)
+func loadSimpleTestCase() TestCase {
+	file, _ := os.Open("../samples/sample4.mf4")
+	return TestCase{
+		file:            file,
+		expectedChannel: []string{"channel_b", "channel_c", "time", "channel_a"},
+		expectedSample:  []int64{5, 10, 0, 10, 5, 10, 10, 5, 0, 0, 10, 5, 10, 5, 10, 0, 0, 5, 5, 0},
+		expectedVersion: "4.10",
 	}
+}
 
-	// test read file
-	m, err := ReadFile(file)
+func TesReadFile(t *testing.T) {
+	testcase := loadSimpleTestCase()
+
+	_, err := mf4.ReadFile(testcase.file)
 	if err != nil {
-		t.Fatalf(`could not read file %v`, err)
+		t.Fatalf(`could not read file: %v`, err)
 	}
+}
 
-	//test read sample
+func TesReadBasicInformations(t *testing.T) {
+	testcase := loadSimpleTestCase()
+
+	m, _ := mf4.ReadFile(testcase.file)
+	value := m.Version()
+	if value != testcase.expectedVersion {
+		t.Fatalf(`wrong version: expected %s, found %s`, testcase.expectedVersion, value)
+	}
+}
+
+func TestReadChannels(t *testing.T) {
+	testcase := loadSimpleTestCase()
+
+	m, _ := mf4.ReadFile(testcase.file)
+
+	for _, expected := range m.ChannelNames()[0] {
+		if !slices.Contains(testcase.expectedChannel, expected) {
+			t.Fatalf(`could not find %s`, expected)
+		}
+	}
+}
+
+func TestReadSampleSimpleDTblockINT(t *testing.T) {
+	testcase := loadSimpleTestCase()
+
+	m, _ := mf4.ReadFile(testcase.file)
+
 	result, err := m.GetChannelSample(0, "channel_b")
 	if err != nil {
-		t.Fatalf(`could not read channel %v`, err)
+		t.Fatalf(`could not read samples from file %v`, err)
 	}
 
-	expected := []int64{5, 10, 0, 10, 5, 10, 10, 5, 0, 0, 10, 5, 10, 5, 10, 0, 0, 5, 5, 0}
 	// Check if the lengths of the two arrays are equal
-	if len(result) != len(expected) {
-		t.Errorf("Lengths mismatch. Expected: %d, Got: %d", len(expected), len(result))
+	if len(result) != len(testcase.expectedSample) {
+		t.Errorf("Lengths mismatch. Expected: %d, Got: %d", len(testcase.expectedSample), len(result))
 		return
 	}
 
-	// Convert interface{} to int for comparison (using reflection)
-	intValues := make([]int64, len(result))
-	for i, v := range result {
-		// Ensure each value is an int before conversion
-		if intVal, ok := v.(int64); ok {
-			intValues[i] = intVal
-		} else {
-			t.Errorf("Element %d in result is not an integer: %v", i, v)
+	for index, value := range result {
+		if testcase.expectedSample[index] != value.(int64) {
+			t.Errorf("Mismatch sample. Expected: %d, Got: %d", testcase.expectedSample[index], value)
 			return
 		}
-	}
-
-	// Compare the converted int slice with the expected slice
-	if !reflect.DeepEqual(intValues, expected) {
-		t.Errorf("Result %v does not match expected slice %v", intValues, expected)
 	}
 }
