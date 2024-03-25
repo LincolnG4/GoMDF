@@ -5,4 +5,4 @@ run: build
 	./bin/gomdf
 
 test:
-	go test -v ./... -count=1
+	go test -v ./... -count=1 -v
