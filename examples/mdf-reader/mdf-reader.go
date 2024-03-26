@@ -59,7 +59,7 @@ func main() {
 	fmt.Println(samples)
 	// Download attachments
 	// att := m.GetAttachments()[0]
-	// m.SaveAttachment(att, "/PATH/TO/BE/SAVE/")
+	// m.SaveAttachmentTo(att, "/PATH/TO/BE/SAVE/")
 
 	// Read Change logs
 	m.ReadChangeLog()
