@@ -1,5 +1,5 @@
-# GoMDF - Read and Write ASAM MDF FILES
-Go package for reading ASAM MDF files.
+# GoMDF - Read and Write ASAM MF4 FILES
+Go package for reading ASAM MF4 files.
 
 ## Installation
 ⚠️ The package not finalized   !!! ⚠️
@@ -32,19 +32,19 @@ func main() {
 	// Access metadata
 	fmt.Println(m.Version())
 	fmt.Println("Version ID --> ", m.MdfVersion())
-	fmt.Println("Start Time NS --> ", m.StartTimeNs())
-	fmt.Println("Start StartTimeLT --> ", m.StartTimeLT())
+	fmt.Println("Start Time NS --> ", m.GetStartTimeNs())
+	fmt.Println("Start StartTimeLT --> ", m.GetStartTimeLT())
 
 	// Get channel samples
 	fmt.Println(m.ChannelNames())
-	samples, err := m.GetChannelSample(0, "ActlEngPrcntTorqueHighResolution")
+	samples, err := m.GetChannelSample(0, "VehSpd_Cval_CPC")
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(samples)
 	// Download attachments
 	att := m.GetAttachments()[0]
-	m.SaveAttachment(att, "/PATH/TO/BE/SAVE/")
+	m.SaveAttachmentTo(att, "/PATH/TO/BE/SAVE/")
 
 	// Read Change logs
 	m.ReadChangeLog()
@@ -53,7 +53,7 @@ func main() {
 ```
 
 ## Features
-- Parse MDF file format and load metadata
+- Parse MF4 file format and load metadata
 - Extract channel sample data 
 - Support for attachments
 - Support for Events
