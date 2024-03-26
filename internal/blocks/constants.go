@@ -96,16 +96,37 @@ const (
 )
 
 const (
-	CcNoConversion          uint8 = 0
-	CcLinear                uint8 = 1
-	CcRational              uint8 = 2
-	CcAlgebraic             uint8 = 3
+	CcNoConversion uint8 = 0
+	// Linear conversion
+	CcLinear uint8 = 1
+
+	// Rational conversion
+	CcRational uint8 = 2
+
+	// Algebraic conversion
+	CcAlgebraic uint8 = 3
+
+	// value to value tabular look-up with interpolation
 	CcVVLookUpInterpolation uint8 = 4
-	CcVVLookUp              uint8 = 5
-	CcVrVLookUp             uint8 = 6
-	CcVTLookUp              uint8 = 7
-	CcVrTLookUp             uint8 = 8
-	CcTVLookUp              uint8 = 9
-	CcTTLookUp              uint8 = 10
-	CcBitfield              uint8 = 11
+
+	// value to value tabular look-up without interpolation
+	CcVVLookUp uint8 = 5
+
+	// value range to value tabular look-up
+	CcVrVLookUp uint8 = 6
+
+	// value to text/scale conversion tabular look-up
+	CcVTLookUp uint8 = 7
+
+	// value range to text/scale conversion tabular look-up
+	CcVrTLookUp uint8 = 8
+
+	// text to value tabular look-up
+	CcTVLookUp uint8 = 9
+
+	// text to text tabular look-up (translation)
+	CcTTLookUp uint8 = 10
+
+	// bitfield text table
+	CcBitfield uint8 = 11
 )

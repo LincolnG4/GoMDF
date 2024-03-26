@@ -139,7 +139,7 @@ func (m *MF4) ChannelNames() map[int][]string {
 	return channelMap
 }
 
-// GetChannelSample loads sample by DataGroupName and ChannelName
+// GetChannelSample loads sample based DataGroupName and ChannelName
 func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interface{}, error) {
 	var sample []interface{}
 	var err error
@@ -218,7 +218,7 @@ func (m *MF4) GetAttachments() []AT.AttFile {
 }
 
 // Saves attachment file input to output path
-func (m *MF4) SaveAttachment(attachment AT.AttFile, outputPath string) AT.AttFile {
+func (m *MF4) SaveAttachmentTo(attachment AT.AttFile, outputPath string) AT.AttFile {
 	return attachment.Save(m.File, outputPath)
 }
 

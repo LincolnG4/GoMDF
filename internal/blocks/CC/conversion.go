@@ -278,7 +278,6 @@ func (b *Block) GetAlgebraic(file *os.File) Conversion {
 func (b *Block) GetValueToText(file *os.File) Conversion {
 	v := b.getVal()
 	t := b.refToString(file)
-
 	return &ValueText{
 		Info:    b.getInfo(file),
 		Keys:    v,
@@ -384,8 +383,7 @@ func (vt *ValueText) Apply(sample *[]interface{}) {
 
 	for i, v := range s {
 		c := convertToFloat64(v)
-
-		for j := 0; j < len(vt.Keys)-1; j++ {
+		for j := 0; j < len(vt.Keys); j++ {
 			if c == vt.Keys[j] {
 				switch v := vt.Links[j].(type) {
 				case string:
@@ -596,13 +594,28 @@ func interpolate(x, x0, x1, y0, y1 float64) float64 {
 
 func convertToFloat64(value interface{}) float64 {
 	switch v := value.(type) {
-	case int:
+	case uint8:
+		return float64(v)
+	case uint16:
+		return float64(v)
+	case uint32:
+		return float64(v)
+	case uint64:
+		return float64(v)
+	case int8:
+		return float64(v)
+	case int16:
+		return float64(v)
+	case int32:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case float32:
 		return float64(v)
 	case float64:
 		return v
 	default:
-		fmt.Printf("Variable type %T: not numerical\n", v)
-		return 0.0 // or handle the error in an appropriate way
+		panic(fmt.Errorf("variable type %T: not numerical", v))
 	}
 }
 
@@ -707,6 +720,7 @@ func interfaceArrayToStringArray(interfaceArray []interface{}) []string {
 	}
 	return stringArray
 }
+
 func (b *Block) getVal() []float64 {
 	return b.Data.Val
 }
