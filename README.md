@@ -16,11 +16,11 @@ import (
 	"fmt"
 	"os"
 
-	mf4 "github.com/LincolnG4/GoMDF/mf4"
+	mf4 "github.com/LincolnG4/GoMDF"
 )
 
 func main() {
-	file, err := os.Open("sample3.mf4")
+	file, err := os.Open("MYFile.mf4")
 	if err != nil {
 		panic(err)
 	}
@@ -37,18 +37,24 @@ func main() {
 
 	// Get channel samples
 	fmt.Println(m.ChannelNames())
-	samples, err := m.GetChannelSample(0, "VehSpd_Cval_CPC")
+	samples, err := m.GetChannelSample(0, "channel1")
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(samples)
+
 	// Download attachments
 	att := m.GetAttachments()[0]
 	m.SaveAttachmentTo(att, "/PATH/TO/BE/SAVE/")
 
+	// Read Events
+	for _, event := range m.ListEvents() {
+		fmt.Printf("%+v\n", event)
+	}
 	// Read Change logs
 	m.ReadChangeLog()
 }
+
 
 ```
 
