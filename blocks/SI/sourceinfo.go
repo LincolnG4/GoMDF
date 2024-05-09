@@ -36,6 +36,7 @@ type Data struct {
 	Reserved [5]byte
 }
 
+// SourceInfo describes the source of an acquisition mode or of a signal
 type SourceInfo struct {
 	Name    string
 	Path    string

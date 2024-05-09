@@ -17,15 +17,52 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/SI"
 )
 
+type ChannelGroup struct {
+	Block      *CG.Block
+	Channels   map[string]*Channel
+	DataGroup  *DG.Block
+	SourceInfo SI.SourceInfo
+	Comment    string
+}
+
 type Channel struct {
-	Name         string
-	Block        *CN.Block
-	Convertion   CC.Conversion
-	DataGroup    *DG.Block
+	// channel's name
+	Name string
+
+	// signal results with CCBLOCK applied on the data
+	Samples *[]interface{}
+
+	// conversion formula to convert the raw values to physical values with a
+	// physical unit
+	Conversion CC.Conversion
+
+	// channel type
+	Type string
+
+	// pointer to the master channel of the channel group.
+	// A 'nil' value indicates that this channel itself is the master.
+	Master *Channel
+
+	// pointer to data group
+	DataGroup *DG.Block
+
+	// data group's index
+	DataGroupIndex int
+
+	// pointer to channel group
 	ChannelGroup *CG.Block
-	SourceInfo   SI.SourceInfo
-	Comment      string
-	MdComment    string
+
+	// channel group's index
+	ChannelIndex int
+
+	// describes the source of an acquisition mode or of a signal
+	SourceInfo SI.SourceInfo
+
+	// additional information about the channel. Can be 'nil'
+	Comment string
+
+	// pointer to the CNBLOCK
+	block *CN.Block
 }
 
 // parseSignalMeasure decode signal sample based on data type
@@ -56,7 +93,7 @@ func parseSignalMeasure(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType 
 // readMeasure return extract sample measure from DTBlock//DLBlock
 func (c *Channel) readMeasure(file *os.File, version uint16, isDataList bool) ([]interface{}, error) {
 	// init
-	cn := c.Block
+	cn := c.block
 	cg := c.ChannelGroup
 
 	var dtl *DL.Block
@@ -127,14 +164,14 @@ func (c *Channel) readDataList(file *os.File, version uint16) ([]interface{}, er
 
 // signalValueAddress returns the offset from the signal in the DTBlock
 func (c *Channel) signalValueAddress(dataAddress int64) int64 {
-	return int64(blocks.HeaderSize) + dataAddress + int64(c.DataGroup.GetRecordIDSize()) + int64(c.Block.Data.ByteOffset)
+	return int64(blocks.HeaderSize) + dataAddress + int64(c.DataGroup.GetRecordIDSize()) + int64(c.block.Data.ByteOffset)
 }
 
-func (c *Channel) applyConvertion(sample *[]interface{}) {
-	if c.Convertion == nil {
+func (c *Channel) applyConversion(sample *[]interface{}) {
+	if c.Conversion == nil {
 		return
 	}
-	c.Convertion.Apply(sample)
+	c.Conversion.Apply(sample)
 }
 
 func (c *Channel) readInvalidationBit(file *os.File) (bool, error) {
@@ -169,5 +206,5 @@ func (c *Channel) getDataBytes() uint32 {
 }
 
 func (c *Channel) getInvalidationBitPos() uint32 {
-	return c.Block.InvalBitPos()
+	return c.block.InvalBitPos()
 }

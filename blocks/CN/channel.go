@@ -153,9 +153,9 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	return &b
 }
 
-// GetConversion return Conversion structs that hold the formula to convert
+// Conversion return Conversion structs that hold the formula to convert
 // raw sample to desired value.
-func (b *Block) GetConversion(file *os.File, channelDataType uint8) CC.Conversion {
+func (b *Block) Conversion(file *os.File, channelDataType uint8) CC.Conversion {
 	cc := b.NewConversion(file)
 	if cc == nil {
 		return nil
@@ -173,7 +173,7 @@ func (b *Block) NewConversion(file *os.File) *CC.Block {
 
 func (b *Block) LoadDataType(lenSize int) interface{} {
 	var dtype interface{} = 0
-	switch b.GetDataType() {
+	switch b.DataType() {
 	case UnsignedIntegerLE, UnsignedIntegerBE:
 		switch lenSize {
 		case 1:
@@ -224,7 +224,7 @@ func LittleEndianArray() []int {
 
 func (b *Block) ByteOrder() binary.ByteOrder {
 	//Data Types that are Little Endian: 0, 2, 4, 8, 15
-	if slices.Contains(LittleEndianArray(), int(b.GetDataType())) {
+	if slices.Contains(LittleEndianArray(), int(b.DataType())) {
 		return binary.LittleEndian
 	}
 	return binary.BigEndian
@@ -256,8 +256,14 @@ func (b *Block) InvalBitPos() uint32 {
 	return b.Data.InvalBitPos
 }
 
-func (b *Block) GetChannelName(f *os.File) string {
-	t, err := TX.GetText(f, b.getTxName())
+// IsVLSD returns `true` if channel is variable length signal data.
+// Otherwise it returns `false`
+func (b *Block) IsVLSD() bool {
+	return b.Type() == VLSD
+}
+
+func (b *Block) ChannelName(f *os.File) string {
+	t, err := TX.GetText(f, b.TxName())
 	if err != nil {
 		return ""
 	}
@@ -265,23 +271,23 @@ func (b *Block) GetChannelName(f *os.File) string {
 	return t
 }
 
-func (b *Block) getTxName() int64 {
+func (b *Block) TxName() int64 {
 	return b.Link.TxName
 }
 
-func (b *Block) GetCommentMd() int64 {
+func (b *Block) CommentMd() int64 {
 	return b.Link.MdComment
 }
 
-func (b *Block) GetType() uint8 {
+func (b *Block) Type() uint8 {
 	return b.Data.Type
 }
 
-func (b *Block) GetSyncType() uint8 {
+func (b *Block) SyncType() uint8 {
 	return b.Data.SyncType
 }
 
-func (b *Block) GetDataType() uint8 {
+func (b *Block) DataType() uint8 {
 	return b.Data.DataType
 }
 

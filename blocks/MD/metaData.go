@@ -16,6 +16,9 @@ type Block struct {
 }
 
 func New(file *os.File, startAdress int64) string {
+	if startAdress == 0 {
+		return ""
+	}
 
 	var blockSize uint64 = blocks.HeaderSize
 	var b Block

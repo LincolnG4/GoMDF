@@ -30,14 +30,6 @@ type MF4 struct {
 	ChannelGroup []*ChannelGroup
 }
 
-type ChannelGroup struct {
-	Block      *CG.Block
-	Channels   map[string]*Channel
-	DataGroup  *DG.Block
-	SourceInfo SI.SourceInfo
-	Comment    string
-}
-
 func ReadFile(file *os.File) (*MF4, error) {
 	var address int64 = 0
 	mf4File := MF4{
@@ -67,15 +59,13 @@ func (m *MF4) read() {
 	version := m.MdfVersion()
 	nextDataGroupAddress := m.firstDataGroup()
 
-	comment := ""
+	var comment string
 	for nextDataGroupAddress != 0 {
 		dataGroupBlock := DG.New(file, nextDataGroupAddress)
 		mdCommentAddr := dataGroupBlock.MetadataComment()
-		if mdCommentAddr != 0 {
-			comment = MD.New(file, mdCommentAddr)
-		}
-
+		comment = MD.New(file, mdCommentAddr)
 		nextAddressCG := dataGroupBlock.FirstChannelGroup()
+
 		for nextAddressCG != 0 {
 			cgBlock := CG.New(file, version, nextAddressCG)
 
@@ -91,24 +81,16 @@ func (m *MF4) read() {
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
 				cn := &Channel{
-					Name:         cnBlock.GetChannelName(m.File),
+					Name:         cnBlock.ChannelName(m.File),
 					ChannelGroup: cgBlock,
 					DataGroup:    dataGroupBlock,
-					Block:        cnBlock,
 					SourceInfo:   SI.Get(file, version, cnBlock.Link.SiSource),
-					Convertion:   cnBlock.GetConversion(m.File, cnBlock.GetDataType()),
+					Comment:      MD.New(file, cnBlock.CommentMd()),
+					Conversion:   cnBlock.Conversion(m.File, cnBlock.DataType()),
+					block:        cnBlock,
 				}
 
 				channelGroup.Channels[cn.Name] = cn
-
-				comment := ""
-				mdCommentAdress := cnBlock.GetCommentMd()
-				if mdCommentAdress != 0 {
-					comment = MD.New(file, mdCommentAdress)
-				}
-
-				cn.Comment = comment
-
 				nextAddressCN = cnBlock.Next()
 			}
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
@@ -134,7 +116,6 @@ func (m *MF4) ChannelNames() map[int][]string {
 
 // GetChannelSample loads sample based DataGroupName and ChannelName
 func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interface{}, error) {
-	var sample []interface{}
 	var err error
 
 	file := m.File
@@ -163,10 +144,7 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 		return nil, err
 	}
 
-	if cn.Block.GetType() == CN.VLSD {
-		fmt.Println("LSD")
-	}
-
+	var sample []interface{}
 	switch blockHeader {
 	case blocks.DtID, blocks.DvID:
 		sample, err = cn.readSingleDataBlock(file)
@@ -180,7 +158,7 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 		return nil, err
 	}
 
-	cn.applyConvertion(&sample)
+	cn.applyConversion(&sample)
 	return sample, nil
 }
 
