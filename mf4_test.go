@@ -113,7 +113,7 @@ func TestReadChannels(t *testing.T) {
 
 	m, _ := mf4.ReadFile(testcase.file)
 
-	for _, expected := range m.ChannelNames()[0] {
+	for _, expected := range m.ListAllChannelsNames() {
 		if !slices.Contains(testcase.Channel, expected) {
 			t.Fatalf(`could not find %s`, expected)
 		}
@@ -177,5 +177,5 @@ func TestNestedConversion(t *testing.T) {
 }
 
 func TestEvents(t *testing.T) {
-	
+
 }

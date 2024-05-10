@@ -28,6 +28,7 @@ type MF4 struct {
 	//Address to First File History Block
 	FileHistory  int64
 	ChannelGroup []*ChannelGroup
+	Channels     []*Channel
 }
 
 func ReadFile(file *os.File) (*MF4, error) {
@@ -51,6 +52,7 @@ func ReadFile(file *os.File) (*MF4, error) {
 
 func (m *MF4) read() {
 	var file *os.File = m.File
+	var comment string
 
 	if !m.IsFinalized() {
 		panic("NOT FINALIZED MF4, PACKAGE IS NOT PREPARED")
@@ -58,15 +60,18 @@ func (m *MF4) read() {
 
 	version := m.MdfVersion()
 	nextDataGroupAddress := m.firstDataGroup()
-
-	var comment string
+	m.Channels = make([]*Channel, 0)
+	dgindex := 0
 	for nextDataGroupAddress != 0 {
 		dataGroupBlock := DG.New(file, nextDataGroupAddress)
 		mdCommentAddr := dataGroupBlock.MetadataComment()
 		comment = MD.New(file, mdCommentAddr)
 		nextAddressCG := dataGroupBlock.FirstChannelGroup()
 
+		cgIndex := 0
 		for nextAddressCG != 0 {
+			var masterChannel Channel
+
 			cgBlock := CG.New(file, version, nextAddressCG)
 
 			channelGroup := &ChannelGroup{
@@ -80,38 +85,38 @@ func (m *MF4) read() {
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
 				cnBlock := CN.New(file, version, nextAddressCN)
+
 				cn := &Channel{
-					Name:         cnBlock.ChannelName(m.File),
-					ChannelGroup: cgBlock,
-					DataGroup:    dataGroupBlock,
-					SourceInfo:   SI.Get(file, version, cnBlock.Link.SiSource),
-					Comment:      MD.New(file, cnBlock.CommentMd()),
-					Conversion:   cnBlock.Conversion(m.File, cnBlock.DataType()),
-					block:        cnBlock,
+					Name:              cnBlock.ChannelName(m.File),
+					ChannelGroup:      cgBlock,
+					ChannelGroupIndex: cgIndex,
+					DataGroup:         dataGroupBlock,
+					DataGroupIndex:    dgindex,
+					Type:              cnBlock.Type(),
+					Master:            &masterChannel,
+					SourceInfo:        SI.Get(file, version, cnBlock.Link.SiSource),
+					Comment:           MD.New(file, cnBlock.CommentMd()),
+					Conversion:        cnBlock.Conversion(m.File, cnBlock.DataType()),
+					block:             cnBlock,
+					mf4:               m,
+				}
+
+				// save master channel address
+				if cnBlock.IsMaster() {
+					masterChannel = *cn
+					cn.Master = nil
 				}
 
 				channelGroup.Channels[cn.Name] = cn
+				m.Channels = append(m.Channels, cn)
 				nextAddressCN = cnBlock.Next()
 			}
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
 			nextAddressCG = cgBlock.Next()
 		}
-
 		nextDataGroupAddress = dataGroupBlock.Next()
+		dgindex++
 	}
-}
-
-// ChannelNames returns a map[DataGroup]ChannelName of channels of each datagroup
-func (m *MF4) ChannelNames() map[int][]string {
-	channelMap := make(map[int][]string, 0)
-	for i, cg := range m.ChannelGroup {
-		channelNames := make([]string, 0)
-		for name := range cg.Channels {
-			channelNames = append(channelNames, name)
-		}
-		channelMap[i] = channelNames
-	}
-	return channelMap
 }
 
 // GetChannelSample loads sample based DataGroupName and ChannelName
@@ -162,11 +167,51 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 	return sample, nil
 }
 
+// ListAllChannelsNames returns an slice with all channels from the MF4 file
+func (m *MF4) ListAllChannels() []*Channel {
+	return m.Channels
+}
+
+// ListAllChannels returns an slice with all channels from the MF4 file
+func (m *MF4) ListAllChannelsNames() []string {
+	var n []string
+	for _, channel := range m.Channels {
+		n = append(n, channel.Name)
+	}
+	return n
+}
+
+// ListAllChannels returns an slice with all channels from the MF4 file
+func (m *MF4) ListAllChannelsFromDataGroup(datagroupIndex int) []*Channel {
+	return m.Channels
+}
+
+// MapAllChannelsNames returns an map with all channels from the MF4 file group
+// by data group
+func (m *MF4) MapAllChannelsNames() map[int]string {
+	mp := make(map[int]string)
+	for _, channel := range m.Channels {
+		mp[channel.DataGroupIndex] = channel.Name
+	}
+	return mp
+}
+
+// MapAllChannels returns an map with all channels from the MF4 file group
+// by data group
+func (m *MF4) MapAllChannels() map[int]*Channel {
+	mp := make(map[int]*Channel)
+	for _, channel := range m.Channels {
+		mp[channel.DataGroupIndex] = channel
+	}
+	return mp
+}
+
 // loadEvents loads and processes events from the given MF4 instance.
 // Events are represented by EVBLOCK structures, providing synchronization details.
 // The function iterates through the linked list of events, creating EV instances
 // and handling event details such as names, comments, and scopes.
-// If file has no events or errors occur during EV instance creation, it will return `nil`
+// If file has no events or errors occur during EV instance creation, it will
+// return `nil`
 func (m *MF4) ListEvents() []*EV.Event {
 	if m.getFirstEvent() == 0 {
 		return nil
@@ -272,9 +317,10 @@ func (m *MF4) GetMeasureComment() string {
 }
 
 // ReadChangeLog reads and prints the change log entries from the MF4 file.
-// The change log is stored in FHBLOCK structures, each representing a change made to the MDF file.
-// The function iterates through the linked list of FHBLOCKs starting from the first one referenced
-// by the HDBLOCK, printing the chronological change history.
+// The change log is stored in FHBLOCK structures, each representing a change
+// made to the MDF file.
+// The function iterates through the linked list of FHBLOCKs starting from the
+// first one referenced by the HDBLOCK, printing the chronological change history.
 //
 // Parameters:
 //

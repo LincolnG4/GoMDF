@@ -171,6 +171,12 @@ func (b *Block) NewConversion(file *os.File) *CC.Block {
 	return CC.New(file, b.Link.CcConvertion)
 }
 
+// Master returns a pointer to the master. It returns 'nil' if the channel is
+// the master.
+func MasterPointer() *Block {
+	return &Block{}
+}
+
 func (b *Block) LoadDataType(lenSize int) interface{} {
 	var dtype interface{} = 0
 	switch b.DataType() {
@@ -256,10 +262,36 @@ func (b *Block) InvalBitPos() uint32 {
 	return b.Data.InvalBitPos
 }
 
-// IsVLSD returns `true` if channel is variable length signal data.
-// Otherwise it returns `false`
+// IsVLSD returns `true` if channel is variable length signal data. Otherwise it
+// returns `false`
 func (b *Block) IsVLSD() bool {
-	return b.Type() == VLSD
+	return b.IotaType() == VLSD
+}
+
+// IsVLSD returns `true` if channel is the master. Otherwise it returns `false`
+func (b *Block) IsMaster() bool {
+	return b.IotaType() == Master
+}
+
+func (b *Block) Type() string {
+	switch b.IotaType() {
+	case FixedLenght:
+		return "FixedLenght"
+	case VLSD:
+		return "VLSD"
+	case Master:
+		return "Master"
+	case VirtualMaster:
+		return "VirtualMaster"
+	case Synchronization:
+		return "Synchronization"
+	case MaximumLengthData:
+		return "MaximumLengthData"
+	case VirtualData:
+		return "VirtualData"
+	default:
+		return ""
+	}
 }
 
 func (b *Block) ChannelName(f *os.File) string {
@@ -279,7 +311,7 @@ func (b *Block) CommentMd() int64 {
 	return b.Link.MdComment
 }
 
-func (b *Block) Type() uint8 {
+func (b *Block) IotaType() uint8 {
 	return b.Data.Type
 }
 

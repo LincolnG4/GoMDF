@@ -84,6 +84,10 @@ func (b *Block) Next() int64 {
 	return b.Link.Next
 }
 
+func (b *Block) HeaderID() string {
+	return string(b.Header.ID[:])
+}
+
 func (b *Block) BlankBlock() *Block {
 	return &Block{
 		Header: blocks.Header{

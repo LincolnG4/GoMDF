@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -53,13 +54,16 @@ type Channel struct {
 	ChannelGroup *CG.Block
 
 	// channel group's index
-	ChannelIndex int
+	ChannelGroupIndex int
 
 	// describes the source of an acquisition mode or of a signal
 	SourceInfo SI.SourceInfo
 
 	// additional information about the channel. Can be 'nil'
 	Comment string
+
+	//pointer to mf4 file
+	mf4 *MF4
 
 	// pointer to the CNBLOCK
 	block *CN.Block
@@ -150,6 +154,53 @@ func (c *Channel) readMeasure(file *os.File, version uint16, isDataList bool) ([
 		readAddr += rowSize
 	}
 	return measure, nil
+}
+
+// Sample returns a array with the measures of the channel applying conversion
+// block on it
+func (c *Channel) Sample() ([]interface{}, error) {
+	sample, err := c.extractSample()
+
+	if err != nil {
+		return nil, err
+	}
+
+	c.applyConversion(&sample)
+	return sample, nil
+}
+
+// RawSample returns a array with the measures of the channel not applying
+// conversion block on it
+func (c *Channel) RawSample() ([]interface{}, error) {
+	sample, err := c.extractSample()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return sample, nil
+}
+
+// extractSample returns a array with sample extracted from datablock based on
+// header id
+func (c *Channel) extractSample() ([]interface{}, error) {
+	var sample []interface{}
+
+	blockHeader, err := blocks.GetHeaderID(c.mf4.File, c.DataGroup.Link.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	switch blockHeader {
+	case blocks.DtID, blocks.DvID:
+		sample, err = c.readSingleDataBlock(c.mf4.File)
+	case blocks.DlID:
+		sample, err = c.readDataList(c.mf4.File, c.mf4.MdfVersion())
+	default:
+		return nil, fmt.Errorf("package not ready to read this file")
+	}
+
+	return sample, err
 }
 
 // readSingleDataBlock returns measure from DTBlock
