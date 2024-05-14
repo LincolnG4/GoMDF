@@ -17,6 +17,7 @@ const (
 	DlID string = "##DL"
 	DtID string = "##DT"
 	DvID string = "##DV"
+	DzID string = "##DZ"
 	EvID string = "##EV"
 	FhID string = "##FH"
 	HdID string = "##HD"

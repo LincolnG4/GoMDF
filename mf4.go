@@ -123,7 +123,6 @@ func (m *MF4) read() {
 func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interface{}, error) {
 	var err error
 
-	file := m.File
 	cgrp := m.ChannelGroup[indexDataGroup]
 
 	// Does channel exist in datagroup?
@@ -132,33 +131,11 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 		return nil, fmt.Errorf("channel %s doens't exist", channelName)
 	}
 
-	dg := cgrp.DataGroup
-	// cg := cgrp.Block
-
-	//Get channel with compositon Structure or Array
-	// if cn.IsComposed() {
-
-	// }
-
 	// if cn.IsAllValuesInvalid() {
 	// 	return nil, fmt.Errorf("channel %s has invalid read", channelName)
 	// }
 
-	blockHeader, err := blocks.GetHeaderID(file, dg.Link.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	var sample []interface{}
-	switch blockHeader {
-	case blocks.DtID, blocks.DvID:
-		sample, err = cn.readSingleDataBlock(file)
-	case blocks.DlID:
-		sample, err = cn.readDataList(file, m.MdfVersion())
-	default:
-		return nil, fmt.Errorf("package not ready to read this file")
-	}
-
+	sample, err := cn.extractSample()
 	if err != nil {
 		return nil, err
 	}

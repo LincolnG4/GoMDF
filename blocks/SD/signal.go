@@ -1,7 +1,6 @@
 package SD
 
 import (
-	"log"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/blocks"
@@ -13,11 +12,17 @@ type Block struct {
 }
 
 func New(file *os.File, startAdress int64) *Block {
-	if blockHeader, err := blocks.GetHeaderID(file, startAdress); blockHeader != blocks.SdID {
-		log.Fatalf("header of signal data %v != ##SD: %s", startAdress, err)
+	var b Block
+	var err error
+
+	b.Header = blocks.Header{}
+
+	b.Header, err = blocks.GetHeader(file, startAdress, blocks.SdID)
+	if err != nil {
+		return b.BlankBlock()
 	}
 
-	return &Block{}
+	return &b
 }
 
 func (b *Block) BlankBlock() *Block {
