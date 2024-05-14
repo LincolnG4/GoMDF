@@ -246,7 +246,7 @@ func (c *Channel) readMeasureFromListOfSDBlock(file *os.File) ([]interface{}, er
 		}
 
 		length = binary.LittleEndian.Uint32(buflenght)
-		fmt.Println(k, length)
+
 		bufValue := make([]byte, length)
 		if err := binary.Read(file, binary.LittleEndian, &bufValue); err != nil {
 			return nil, fmt.Errorf("error reading bufValue section sdblock: %s", err)
@@ -257,7 +257,7 @@ func (c *Channel) readMeasureFromListOfSDBlock(file *os.File) ([]interface{}, er
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println("##########", k, value)
+
 		measure = append(measure, value)
 
 		next += int64(len(buflenght)) + int64(length)
