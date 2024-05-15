@@ -16,11 +16,11 @@ import (
 	"fmt"
 	"os"
 
-	mf4 "github.com/LincolnG4/GoMDF/mf4"
+	mf4 "github.com/LincolnG4/GoMDF"
 )
 
 func main() {
-	file, err := os.Open("sample3.mf4")
+	file, err := os.Open("sample1.mf4")
 	if err != nil {
 		panic(err)
 	}
@@ -34,20 +34,35 @@ func main() {
 	fmt.Println("Version ID --> ", m.MdfVersion())
 	fmt.Println("Start Time NS --> ", m.GetStartTimeNs())
 	fmt.Println("Start StartTimeLT --> ", m.GetStartTimeLT())
+	fmt.Println()
+	fmt.Println("List Names -->", m.ListAllChannelsNames())
+	fmt.Println("Mapped Channels -->", m.MapAllChannels())
 
+	fmt.Println()
 	// Get channel samples
-	fmt.Println(m.ChannelNames())
-	samples, err := m.GetChannelSample(0, "VehSpd_Cval_CPC")
+	channels := m.ListAllChannels()
+
+	for _, channel := range channels {
+		samples, err := channel.Sample()
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println(samples[:10])
+	}
+
+	sample, err := m.GetChannelSample(2, "EngTripFuel")
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(samples)
+	fmt.Println(sample[:10])
 	// Download attachments
-	att := m.GetAttachments()[0]
-	m.SaveAttachmentTo(att, "/PATH/TO/BE/SAVE/")
+	//att := m.GetAttachments()[0]
+	//m.SaveAttachmentTo(att, "/PATH/TO/BE/SAVE/")
 
 	// Read Change logs
 	m.ReadChangeLog()
+
 }
 
 ```
