@@ -150,63 +150,30 @@ func (c *Channel) readMeasure(file *os.File, version uint16, isDataList bool) ([
 	return measure, nil
 }
 
-// readMeasure return extract sample measure from DTBlock//DLBlock
-func (c *Channel) readMeasureFromSDBlock(file *os.File) ([]interface{}, error) {
+// readMeasureFromSDBlock return extract sample measure from SDBlock or a list of SDBlocks
+func (c *Channel) readMeasureFromSDBlock(file *os.File, isDataList bool) ([]interface{}, error) {
 	var measure []interface{}
 	var length uint32
+	var dtl *DL.Block
+	var err error
+	var sdb *SD.Block
 
 	address := c.block.Link.Data
-
-	b := SD.New(file, address)
-	a := blocks.HeaderSize
-
-	size := c.block.SignalBytesRange()
-	data := make([]byte, size)
-	dataType := c.block.LoadDataType(len(data))
-	byteOrder := c.block.ByteOrder()
-
-	buflenght := make([]byte, 4)
-	for a < b.Header.Length {
-		// Read the Link section from the binary file
-		if err := binary.Read(file, binary.LittleEndian, &buflenght); err != nil {
-			return nil, fmt.Errorf("error reading link section sdblock: %s", err)
-		}
-
-		length = binary.LittleEndian.Uint32(buflenght)
-		bufValue := make([]byte, length)
-		if err := binary.Read(file, binary.LittleEndian, &bufValue); err != nil {
-			return nil, fmt.Errorf("error reading link section sdblock: %s", err)
-		}
-
-		buf := bytes.NewBuffer(bufValue)
-		value, err := parseSignalMeasure(buf, byteOrder, dataType)
-		if err != nil {
-			return nil, err
-		}
-
-		measure = append(measure, value)
-		a += uint64(len(buflenght)) + uint64(length)
-	}
-
-	return measure, nil
-}
-
-// readMeasure return extract sample measure from DTBlock//DLBlock
-func (c *Channel) readMeasureFromListOfSDBlock(file *os.File) ([]interface{}, error) {
-	var measure []interface{}
-	var length uint32
-	//var offset, target uint64
 
 	headerLen := blocks.HeaderSize
 	next := int64(headerLen)
-	address := c.block.Link.Data
 
 	// byte slice order convert
 	byteOrder := c.block.ByteOrder()
 
-	dtl, err := DL.New(file, c.mf4.MdfVersion(), address)
-	if err != nil {
-		return nil, err
+	if isDataList {
+		dtl, err = DL.New(file, c.mf4.MdfVersion(), address)
+		if err != nil {
+			return nil, err
+		}
+		sdb = SD.New(file, dtl.Link.Data[0])
+	} else {
+		sdb = SD.New(file, address)
 	}
 
 	size := c.block.SignalBytesRange()
@@ -214,11 +181,11 @@ func (c *Channel) readMeasureFromListOfSDBlock(file *os.File) ([]interface{}, er
 	dataType := c.block.LoadDataType(len(data))
 
 	buflenght := make([]byte, 4)
-	sdb := SD.New(file, dtl.Link.Data[0])
+
 	target := int64(sdb.Header.Length)
 	k := 0
 	for {
-		if target >= next {
+		if target >= next && isDataList {
 			// Next list
 			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
 				dtl, err = DL.New(file, c.mf4.MdfVersion(), dtl.Next())
@@ -234,6 +201,9 @@ func (c *Channel) readMeasureFromListOfSDBlock(file *os.File) ([]interface{}, er
 			target = int64(sdb.Header.Length)
 			next = int64(headerLen)
 			k += 1
+		}
+		if !isDataList && next >= target {
+			break
 		}
 
 		// Read the Link section from the binary file
@@ -286,6 +256,7 @@ func (c Channel) readFixedLenghtSample() ([]interface{}, error) {
 	case blocks.DlID:
 		sample, err = c.readDataList(c.mf4.File, c.mf4.MdfVersion())
 	default:
+		fmt.Println(blockHeader)
 		return nil, fmt.Errorf("package not ready to read this file")
 	}
 	return sample, err
@@ -308,8 +279,10 @@ func (c *Channel) readVLSDSample() ([]interface{}, error) {
 	case blocks.DlID:
 		return c.readListOfSDBlock(c.mf4.File)
 	case blocks.DzID:
+		fmt.Println(blockHeader)
 		return nil, fmt.Errorf("package not ready to read this file")
 	default:
+		fmt.Println(blockHeader)
 		return sample, fmt.Errorf("package not ready to read this file")
 	}
 
@@ -340,12 +313,12 @@ func (c *Channel) RawSample() ([]interface{}, error) {
 
 // readSDBlock returns measure from SDBlock
 func (c *Channel) readSDBlock(file *os.File) ([]interface{}, error) {
-	return c.readMeasureFromSDBlock(file)
+	return c.readMeasureFromSDBlock(file, false)
 }
 
 // readListOfSDBlock returns measures from a DLBlock of SDBlock
 func (c *Channel) readListOfSDBlock(file *os.File) ([]interface{}, error) {
-	return c.readMeasureFromListOfSDBlock(file)
+	return c.readMeasureFromSDBlock(file, true)
 }
 
 // readSingleDataBlock returns measure from DTBlock
