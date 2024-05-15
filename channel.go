@@ -71,11 +71,7 @@ type Channel struct {
 func parseSignalMeasure(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
 	switch dataType.(type) {
 	case string:
-		strBytes, err := buf.ReadBytes(0) // Assuming strings are NULL-terminated
-		if err != nil {
-			return nil, err
-		}
-		return string(strBytes[:len(strBytes)-1]), nil
+		return buf.String(), nil
 	case []uint8:
 		byteArray := make([]byte, buf.Len())
 		_, err := io.ReadFull(buf, byteArray) // Read all bytes into the array
