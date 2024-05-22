@@ -84,7 +84,15 @@ func (m *MF4) read() {
 
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
-				cnBlock := CN.New(file, version, nextAddressCN)
+				cnBlock, err := CN.New(file, version, nextAddressCN)
+				if err != nil {
+					panic(err)
+				}
+
+				cc, err := cnBlock.Conversion(m.File, cnBlock.DataType())
+				if err != nil {
+					panic(err)
+				}
 
 				cn := &Channel{
 					Name:              cnBlock.ChannelName(m.File),
@@ -96,7 +104,7 @@ func (m *MF4) read() {
 					Master:            &masterChannel,
 					SourceInfo:        SI.Get(file, version, cnBlock.Link.SiSource),
 					Comment:           MD.New(file, cnBlock.CommentMd()),
-					Conversion:        cnBlock.Conversion(m.File, cnBlock.DataType()),
+					Conversion:        cc,
 					block:             cnBlock,
 					mf4:               m,
 				}
@@ -212,7 +220,7 @@ func readArrayBlock(file *os.File, addr int64) {
 }
 
 // GetAttachmemts iterates over all AT blocks and return to an array
-func (m *MF4) GetAttachments() []AT.AttFile {
+func (m *MF4) GetAttachments() ([]AT.AttFile, error) {
 	return AT.Get(m.File, m.getFirstAttachment())
 }
 
@@ -302,7 +310,8 @@ func (m *MF4) GetMeasureComment() string {
 // Parameters:
 //
 //	m: A pointer to the MF4 instance containing the file change log.
-func (m *MF4) ReadChangeLog() {
+func (m *MF4) ReadChangeLog() []string {
+	r := make([]string, 0)
 	nextAddressFH := m.getFileHistory()
 	for nextAddressFH != 0 {
 		fhBlock := FH.New(m.File, nextAddressFH)
@@ -310,10 +319,10 @@ func (m *MF4) ReadChangeLog() {
 		t := fhBlock.GetTimeNs()
 		f := fhBlock.GetTimeFlag()
 
-		fmt.Println(m.formatLog(t, f, c))
-
+		r = append(r, m.formatLog(t, f, c))
 		nextAddressFH = fhBlock.Next()
 	}
+	return r
 }
 
 // StartTimeNs returns the start timestamp of measurement in nanoseconds

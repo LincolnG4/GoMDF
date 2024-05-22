@@ -89,7 +89,7 @@ const (
 	VirtualData
 )
 
-func New(file *os.File, version uint16, startAdress int64) *Block {
+func New(file *os.File, version uint16, startAdress int64) (*Block, error) {
 	var b Block
 	var err error
 
@@ -97,7 +97,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 	b.Header, err = blocks.GetHeader(file, startAdress, blocks.CnID)
 	if err != nil {
-		return b.BlankBlock()
+		return b.BlankBlock(), err
 	}
 
 	//Calculates size of Link Block
@@ -105,7 +105,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	buffEach := make([]byte, blockSize)
 	// Read the Link section from the binary file
 	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
-		fmt.Println("error reading link section chblock:", err)
+		return b.BlankBlock(), fmt.Errorf("error reading link section chblock. %s", err)
 	}
 
 	// Populate the Link fields dynamically based on version
@@ -135,11 +135,11 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 	// Create a buffer based on block size
 	if err := binary.Read(buf, binary.LittleEndian, &b.Data); err != nil {
-		fmt.Println("error reading data chblock:", err)
+		return b.BlankBlock(), fmt.Errorf("error reading data chblock. %s", err)
 	}
 
 	if version < 410 {
-		return &b
+		return &b, nil
 	}
 
 	//Handling versions >= 4.10
@@ -150,23 +150,26 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	if b.Data.Flags == 12 {
 		b.Link.DefaultX = [3]int64{linkFields[9], linkFields[10], linkFields[11]}
 	}
-	return &b
+	return &b, nil
 }
 
 // Conversion return Conversion structs that hold the formula to convert
 // raw sample to desired value.
-func (b *Block) Conversion(file *os.File, channelDataType uint8) CC.Conversion {
-	cc := b.NewConversion(file)
+func (b *Block) Conversion(file *os.File, channelDataType uint8) (CC.Conversion, error) {
+	cc, err := b.NewConversion(file)
+	if err != nil {
+		return nil, err
+	}
 	if cc == nil {
-		return nil
+		return nil, nil
 	}
 	return cc.Get(file, channelDataType)
 }
 
 // NewConversion create a new CCBlock according to the Link.CcConvertion field.
-func (b *Block) NewConversion(file *os.File) *CC.Block {
+func (b *Block) NewConversion(file *os.File) (*CC.Block, error) {
 	if b.Link.CcConvertion == 0 {
-		return nil
+		return nil, nil
 	}
 	return CC.New(file, b.Link.CcConvertion)
 }

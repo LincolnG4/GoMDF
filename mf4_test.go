@@ -146,7 +146,11 @@ func TestReadAttachment(t *testing.T) {
 
 	m, _ := mf4.ReadFile(testcase.file)
 
-	att := m.GetAttachments()
+	att, err := m.GetAttachments()
+	if err != nil {
+		t.Errorf("error read attachments,  error: %s", err)
+
+	}
 	if len(att) != testcase.NumberOfAttachment {
 		t.Errorf("Wrong attachment size,  Expected: %d, Got: %d", testcase.NumberOfAttachment, len(att))
 	}

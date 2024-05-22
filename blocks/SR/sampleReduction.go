@@ -2,7 +2,6 @@ package SR
 
 import (
 	"encoding/binary"
-	"fmt"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/blocks"
@@ -15,25 +14,29 @@ type Block struct {
 }
 
 type Link struct {
-	//Pointer to next SRBLOCK
+	// Pointer to next SRBLOCK
 	Next int64
 
-	//Pointer to sample reduction records or data list block
+	// Pointer to sample reduction records or data list block
 	Data int64
 }
 
 type Data struct {
-	//Number of cycles
+	// Number of cycles
 	CycleCount uint64
 
-	//Length of sample interval
+	// Length of sample interval
 	Interval float64
+
+	// Time == 1, Angle == 2, Distance == 3, Index == 4
 	SyncType uint8
+
+	// Valid for MDF 4.2.0
 	Flags    uint8
 	Reserved [6]byte
 }
 
-func New(file *os.File, version uint16, startAdress int64) *Block {
+func New(file *os.File, version uint16, startAdress int64) (*Block, error) {
 	var b Block
 	var err error
 
@@ -41,7 +44,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 
 	b.Header, err = blocks.GetHeader(file, startAdress, blocks.SrID)
 	if err != nil {
-		return b.BlankBlock()
+		return b.BlankBlock(), err
 	}
 
 	//Calculates size of Link Block
@@ -52,7 +55,7 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	//Create a buffer based on blocksize
 	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
 	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+		return b.BlankBlock(), BinaryError
 	}
 
 	//Calculates size of Data Block
@@ -63,10 +66,10 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	//Create a buffer based on blocksize
 	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
 	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+		return b.BlankBlock(), BinaryError
 	}
 
-	return &b
+	return &b, nil
 }
 
 func (b *Block) BlankBlock() *Block {

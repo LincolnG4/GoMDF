@@ -120,7 +120,7 @@ type BitfieldText struct {
 	Links   []float64
 }
 
-func New(file *os.File, startAdress int64) *Block {
+func New(file *os.File, startAdress int64) (*Block, error) {
 	var b Block
 	var err error
 
@@ -128,7 +128,7 @@ func New(file *os.File, startAdress int64) *Block {
 
 	b.Header, err = blocks.GetHeader(file, startAdress, blocks.CcID)
 	if err != nil {
-		return b.BlankBlock()
+		return b.BlankBlock(), err
 	}
 
 	//Calculates size of Link Block
@@ -182,14 +182,14 @@ func New(file *os.File, startAdress int64) *Block {
 	}
 	b.Data.Val = valcount
 
-	return &b
+	return &b, nil
 }
 
 // Get returns an conversion struct type
-func (b *Block) Get(file *os.File, channelType uint8) Conversion {
+func (b *Block) Get(file *os.File, channelType uint8) (Conversion, error) {
 	switch b.dataType() {
 	case blocks.CcNoConversion:
-		return nil
+		return nil, nil
 	case blocks.CcLinear:
 		return b.GetLinear(file)
 	case blocks.CcRational:
@@ -211,23 +211,23 @@ func (b *Block) Get(file *os.File, channelType uint8) Conversion {
 	case blocks.CcBitfield:
 		return b.GetBitfield(file)
 	default:
-		return nil
+		return nil, fmt.Errorf("invalid ccblock conversion")
 	}
 }
 
 // GetLinear returns linear conversion struct type
-func (b *Block) GetLinear(file *os.File) Conversion {
+func (b *Block) GetLinear(file *os.File) (Conversion, error) {
 	v := b.getVal()
 
 	return &Linear{
 		Info: b.getInfo(file),
 		P1:   v[0],
 		P2:   v[1],
-	}
+	}, nil
 }
 
 // GetVVInterporlation returns value to value tabular look-up with interpolation
-func (b *Block) GetValueToValue(file *os.File) Conversion {
+func (b *Block) GetValueToValue(file *os.File) (Conversion, error) {
 	v := b.getVal()
 	key, value := createKeyValueFloat64(&v)
 	return &ValueValue{
@@ -235,11 +235,11 @@ func (b *Block) GetValueToValue(file *os.File) Conversion {
 		Keys:   key,
 		Values: value,
 		Type:   b.dataType(),
-	}
+	}, nil
 }
 
 // GetVVInterporlation returns value to value tabular look-up with interpolation
-func (b *Block) GetValueRangeToValue(file *os.File, channelType uint8) Conversion {
+func (b *Block) GetValueRangeToValue(file *os.File, channelType uint8) (Conversion, error) {
 	v := b.getVal()
 	keyMin, keyMax, value, def := createKeyMinMaxValue(&v)
 	return &ValueRangeToValue{
@@ -249,11 +249,11 @@ func (b *Block) GetValueRangeToValue(file *os.File, channelType uint8) Conversio
 		Values:   value,
 		Default:  def,
 		DataType: channelType,
-	}
+	}, nil
 }
 
 // GetRational returns rational conversion struct type
-func (b *Block) GetRational(file *os.File) Conversion {
+func (b *Block) GetRational(file *os.File) (Conversion, error) {
 	v := b.getVal()
 
 	return &Rational{
@@ -264,32 +264,41 @@ func (b *Block) GetRational(file *os.File) Conversion {
 		P4:   v[3],
 		P5:   v[4],
 		P6:   v[5],
-	}
+	}, nil
 }
 
-func (b *Block) GetAlgebraic(file *os.File) Conversion {
-	formula := b.refToString(file)
+func (b *Block) GetAlgebraic(file *os.File) (Conversion, error) {
+	formula, err := b.refToString(file)
+	if err != nil {
+		return nil, err
+	}
 	return &Algebraic{
 		Info:    b.getInfo(file),
 		Formula: formula[0].(string),
-	}
+	}, nil
 }
 
-func (b *Block) GetValueToText(file *os.File) Conversion {
+func (b *Block) GetValueToText(file *os.File) (Conversion, error) {
 	v := b.getVal()
-	t := b.refToString(file)
+	t, err := b.refToString(file)
+	if err != nil {
+		return nil, err
+	}
 	return &ValueText{
 		Info:    b.getInfo(file),
 		Keys:    v,
 		Links:   t[:len(t)-2],
 		Default: t[len(t)-1],
-	}
+	}, nil
 }
 
-func (b *Block) GetValueRangeToText(file *os.File, channelType uint8) Conversion {
+func (b *Block) GetValueRangeToText(file *os.File, channelType uint8) (Conversion, error) {
 	v := b.getVal()
 	min, max := createKeyValueFloat64(&v)
-	t := b.refToString(file)
+	t, err := b.refToString(file)
+	if err != nil {
+		return nil, err
+	}
 	return &ValueRangeToText{
 		Info:     b.getInfo(file),
 		KeyMin:   min,
@@ -297,23 +306,29 @@ func (b *Block) GetValueRangeToText(file *os.File, channelType uint8) Conversion
 		Links:    t[:len(t)-2],
 		Default:  t[len(t)-1],
 		DataType: channelType,
-	}
+	}, nil
 }
 
-func (b *Block) GetTextToValue(file *os.File) Conversion {
+func (b *Block) GetTextToValue(file *os.File) (Conversion, error) {
 	v := b.getVal()
-	t := b.refToString(file)
+	t, err := b.refToString(file)
+	if err != nil {
+		return nil, err
+	}
 	keys := interfaceArrayToStringArray(t)
 	return &TextValue{
 		Info:    b.getInfo(file),
 		Keys:    keys,
 		Values:  v[:len(v)-1],
 		Default: v[len(v)-1],
-	}
+	}, nil
 }
 
-func (b *Block) GetTextToText(file *os.File) Conversion {
-	t := b.refToString(file)
+func (b *Block) GetTextToText(file *os.File) (Conversion, error) {
+	t, err := b.refToString(file)
+	if err != nil {
+		return nil, err
+	}
 	k := t[:len(t)-1]
 
 	keys := interfaceArrayToStringArray(k)
@@ -323,17 +338,20 @@ func (b *Block) GetTextToText(file *os.File) Conversion {
 		Keys:    key,
 		Values:  value,
 		Default: t[len(t)-1].(string),
-	}
+	}, nil
 }
 
-func (b *Block) GetBitfield(file *os.File) Conversion {
+func (b *Block) GetBitfield(file *os.File) (Conversion, error) {
 	v := b.getVal()
-	t := b.refToString(file)
+	t, err := b.refToString(file)
+	if err != nil {
+		return nil, err
+	}
 
 	fmt.Println(t, v)
 	return &BitfieldText{
 		Info: b.getInfo(file),
-	}
+	}, nil
 }
 
 // linear formula with two parameters `(y=a*x+b)`
@@ -685,7 +703,7 @@ func (b *Block) getInfo(file *os.File) Info {
 	}
 }
 
-func (b *Block) refToString(file *os.File) []interface{} {
+func (b *Block) refToString(file *os.File) ([]interface{}, error) {
 	var result interface{}
 
 	ref := b.getRef()
@@ -694,23 +712,29 @@ func (b *Block) refToString(file *os.File) []interface{} {
 	for i := 0; i < len(ref); i++ {
 		header, err := blocks.GetBlockType(file, ref[i])
 		if err != nil {
-			return nil
+			return nil, err
 		}
 		hId := string(header.ID[:])
 		if hId == blocks.TxID || hId == blocks.MdID {
 			result, err = TX.GetText(file, ref[i])
 			if err != nil {
-				return nil
+				return nil, err
 			}
 		}
 		if hId == blocks.CcID {
-			cc := New(file, ref[i])
-			result = cc.Get(file, blocks.CcVrTLookUp)
+			cc, err := New(file, ref[i])
+			if err != nil {
+				return nil, err
+			}
+			result, err = cc.Get(file, blocks.CcVrTLookUp)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		r = append(r, result)
 	}
-	return r
+	return r, nil
 }
 
 func interfaceArrayToStringArray(interfaceArray []interface{}) []string {

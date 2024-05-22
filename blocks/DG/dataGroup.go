@@ -22,6 +22,7 @@ type Link struct {
 }
 
 type Data struct {
+	//Number of Bytes used for record IDs in the datablock.
 	RecIDSize uint8
 	Reserved  [7]byte
 }
@@ -63,12 +64,31 @@ func New(file *os.File, startAdress int64) *Block {
 
 }
 
-// IsSorted checks if is Sorted `True`. Else `False` if it is Unsorted
-func (b *Block) IsSorted() bool {
-	return b.GetRecordIDSize() == 0
+// BytesOfRecordIDSize returns number of Bytes used for record IDs in the data
+// block.
+func BytesOfRecordIDSize(numBytes int) (int, error) {
+	switch numBytes {
+	case 0:
+		return 0, nil // Sorted record
+	case 1:
+		return 1, nil // UINT8
+	case 2:
+		return 2, nil // UINT16, LE Byte order
+	case 4:
+		return 4, nil // UINT32, LE Byte order
+	case 8:
+		return 8, nil // UINT64, LE Byte order
+	default:
+		return 0, fmt.Errorf("invalid number of bytes provided for record IDs: %d", numBytes)
+	}
 }
 
-func (b *Block) GetRecordIDSize() uint8 {
+// IsSorted checks if is Sorted `True`. Else `False` if it is Unsorted
+func (b *Block) IsSorted() bool {
+	return b.RecordIDSize() == 0
+}
+
+func (b *Block) RecordIDSize() uint8 {
 	return b.Data.RecIDSize
 }
 

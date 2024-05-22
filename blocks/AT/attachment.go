@@ -62,7 +62,7 @@ type AttFile struct {
 	block        *Block
 }
 
-func New(file *os.File, startAdress int64) *Block {
+func New(file *os.File, startAdress int64) (*Block, error) {
 	var b Block
 	var err error
 
@@ -70,7 +70,7 @@ func New(file *os.File, startAdress int64) *Block {
 
 	b.Header, err = blocks.GetHeader(file, startAdress, blocks.AtID)
 	if err != nil {
-		return b.BlankBlock()
+		return b.BlankBlock(), err
 	}
 
 	//Calculates size of Link Block
@@ -83,7 +83,7 @@ func New(file *os.File, startAdress int64) *Block {
 		fmt.Println("error:", BinaryError)
 	}
 
-	return &b
+	return &b, nil
 }
 
 func (b *Block) LoadAttachmentFile(file *os.File) *AttFile {
@@ -239,12 +239,16 @@ func (b *Block) loadData(file *os.File, adress int64) (*Data, error) {
 	return &d, nil
 }
 
-func Get(f *os.File, a int64) []AttFile {
+func Get(f *os.File, a int64) ([]AttFile, error) {
 	var fileName, comm string
 	i := 0
 	arr := make([]AttFile, 0)
 	for a != 0 {
-		atBlock := New(f, a)
+		atBlock, err := New(f, a)
+		if err != nil {
+			return arr, nil
+		}
+
 		if atBlock.GetTxFilename() != 0 {
 			fileName = atBlock.GetFileName(f, atBlock.GetTxFilename())
 		} else {
@@ -268,7 +272,7 @@ func Get(f *os.File, a int64) []AttFile {
 		})
 		a = atBlock.Next()
 	}
-	return arr
+	return arr, nil
 }
 
 func (b *Block) GetTxFilename() int64 {
