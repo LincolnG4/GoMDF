@@ -239,7 +239,7 @@ func (b *Block) ByteOrder() binary.ByteOrder {
 	return binary.BigEndian
 }
 
-// LengthSignalInRow is number of Bytes required to store (cn_bit_count + cn_bit_offset) bits
+// SignalBytesRange is number of Bytes required to store (cn_bit_count + cn_bit_offset) bits
 func (b *Block) SignalBytesRange() uint32 {
 	return (b.Data.BitCount + uint32(b.Data.BitOffset)) / 8
 }

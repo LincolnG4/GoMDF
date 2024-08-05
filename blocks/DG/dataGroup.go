@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/LincolnG4/GoMDF/blocks"
 )
@@ -66,21 +67,41 @@ func New(file *os.File, startAdress int64) *Block {
 
 // BytesOfRecordIDSize returns number of Bytes used for record IDs in the data
 // block.
-func BytesOfRecordIDSize(numBytes int) (int, error) {
-	switch numBytes {
+func (b *Block) BytesOfRecordIDSize(f *os.File) (uint64, error) {
+	var ids string
+	switch b.RecordIDSize() {
 	case 0:
 		return 0, nil // Sorted record
 	case 1:
-		return 1, nil // UINT8
+		var v uint8 = 0
+		if err := binary.Read(f, binary.LittleEndian, &v); err != nil {
+			return 0, err
+		}
+		ids = fmt.Sprintf("%v", v)
 	case 2:
-		return 2, nil // UINT16, LE Byte order
+		var v uint16 = 0
+		if err := binary.Read(f, binary.LittleEndian, &v); err != nil {
+			return 0, err
+		}
+		ids = fmt.Sprintf("%v", v)
 	case 4:
-		return 4, nil // UINT32, LE Byte order
+		var v uint32 = 0
+		if err := binary.Read(f, binary.LittleEndian, &v); err != nil {
+			return 0, err
+		}
+		ids = fmt.Sprintf("%v", v)
 	case 8:
-		return 8, nil // UINT64, LE Byte order
+		var v uint64 = 0
+		if err := binary.Read(f, binary.LittleEndian, &v); err != nil {
+			return 0, err
+		}
+		ids = fmt.Sprintf("%v", v)
 	default:
-		return 0, fmt.Errorf("invalid number of bytes provided for record IDs: %d", numBytes)
+		return 0, fmt.Errorf("invalid number of bytes for record IDs: %d", b.RecordIDSize())
 	}
+
+	id, _ := strconv.ParseUint(ids, 10, 64)
+	return id, nil
 }
 
 // IsSorted checks if is Sorted `True`. Else `False` if it is Unsorted

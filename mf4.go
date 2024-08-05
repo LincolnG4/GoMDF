@@ -1,6 +1,8 @@
 package mf4
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/CG"
 	"github.com/LincolnG4/GoMDF/blocks/CN"
 	"github.com/LincolnG4/GoMDF/blocks/DG"
+	"github.com/LincolnG4/GoMDF/blocks/DT"
 	"github.com/LincolnG4/GoMDF/blocks/EV"
 	"github.com/LincolnG4/GoMDF/blocks/FH"
 	"github.com/LincolnG4/GoMDF/blocks/HD"
@@ -25,10 +28,21 @@ type MF4 struct {
 	File           *os.File
 	Header         *HD.Block
 	Identification *ID.Block
+
 	//Address to First File History Block
-	FileHistory  int64
+	FileHistory int64
+
+	DataGroups   []*DG.Block
 	ChannelGroup []*ChannelGroup
 	Channels     []*Channel
+
+	//Unsorted
+	UnsortedBlocks []*UnsortedBlock
+}
+
+type UnsortedBlock struct {
+	dataGroup         *DataGroup
+	channelGroupsByID map[uint64]*ChannelGroup
 }
 
 func ReadFile(file *os.File) (*MF4, error) {
@@ -55,19 +69,27 @@ func (m *MF4) read() {
 	var comment string
 
 	if !m.IsFinalized() {
-		panic("NOT FINALIZED MF4, PACKAGE IS NOT PREPARED")
+		panic("MF4 NOT FINALIZED, PACKAGE IS NOT PREPARED")
 	}
 
 	version := m.MdfVersion()
 	nextDataGroupAddress := m.firstDataGroup()
 	m.Channels = make([]*Channel, 0)
+
 	dgindex := 0
 	for nextDataGroupAddress != 0 {
-		dataGroupBlock := DG.New(file, nextDataGroupAddress)
-		mdCommentAddr := dataGroupBlock.MetadataComment()
-		comment = MD.New(file, mdCommentAddr)
-		nextAddressCG := dataGroupBlock.FirstChannelGroup()
+		var dataGroup DataGroup
+		var UnsortedBlocks UnsortedBlock
 
+		isUnsorted := false
+
+		dataGroup = NewDataGroup(file, nextDataGroupAddress)
+		m.DataGroups = append(m.DataGroups, dataGroup.block)
+
+		mdCommentAddr := dataGroup.block.MetadataComment()
+		comment = MD.New(file, mdCommentAddr)
+
+		nextAddressCG := dataGroup.block.FirstChannelGroup()
 		cgIndex := 0
 		for nextAddressCG != 0 {
 			var masterChannel Channel
@@ -77,10 +99,12 @@ func (m *MF4) read() {
 			channelGroup := &ChannelGroup{
 				Block:      cgBlock,
 				Channels:   make(map[string]*Channel),
-				DataGroup:  dataGroupBlock,
+				DataGroup:  dataGroup.block,
 				SourceInfo: SI.Get(file, version, cgBlock.Link.SiAcqSource),
 				Comment:    comment,
 			}
+
+			dataGroup.ChannelGroup = append(dataGroup.ChannelGroup, channelGroup)
 
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
@@ -98,7 +122,7 @@ func (m *MF4) read() {
 					Name:              cnBlock.ChannelName(m.File),
 					ChannelGroup:      cgBlock,
 					ChannelGroupIndex: cgIndex,
-					DataGroup:         dataGroupBlock,
+					DataGroup:         dataGroup.block,
 					DataGroupIndex:    dgindex,
 					Type:              cnBlock.Type(),
 					Master:            &masterChannel,
@@ -106,6 +130,7 @@ func (m *MF4) read() {
 					Comment:           MD.New(file, cnBlock.CommentMd()),
 					Conversion:        cc,
 					block:             cnBlock,
+					isUnsorted:        false,
 					mf4:               m,
 				}
 
@@ -115,6 +140,31 @@ func (m *MF4) read() {
 					cn.Master = nil
 				}
 
+				// Unsorted file
+				if dataGroup.block.Data.RecIDSize != 0 {
+					isUnsorted = true
+					if UnsortedBlocks.dataGroup == nil {
+						UnsortedBlocks = newUnsortedGroup(dataGroup)
+					}
+
+					UnsortedBlocks.channelGroupsByID[cgBlock.Data.RecordId] = channelGroup
+					if cnBlock.Link.Data != 0 {
+						vsldMap := make(map[string]*Channel)
+						vsldMap["vlsd"] = cn
+						cn.isUnsorted = true
+						VLSDBlock := CG.New(file, version, cnBlock.Link.Data)
+						VLSD := &ChannelGroup{
+							Block:      VLSDBlock,
+							Channels:   vsldMap,
+							DataGroup:  dataGroup.block,
+							SourceInfo: SI.Get(file, version, VLSDBlock.Link.SiAcqSource),
+							Comment:    comment,
+						}
+
+						UnsortedBlocks.channelGroupsByID[VLSDBlock.Data.RecordId] = VLSD
+					}
+				}
+
 				channelGroup.Channels[cn.Name] = cn
 				m.Channels = append(m.Channels, cn)
 				nextAddressCN = cnBlock.Next()
@@ -122,8 +172,22 @@ func (m *MF4) read() {
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
 			nextAddressCG = cgBlock.Next()
 		}
-		nextDataGroupAddress = dataGroupBlock.Next()
+		if isUnsorted {
+			m.UnsortedBlocks = append(m.UnsortedBlocks, &UnsortedBlocks)
+			m.Sort(UnsortedBlocks)
+		}
+
+		nextDataGroupAddress = dataGroup.block.Next()
 		dgindex++
+	}
+
+}
+
+func newUnsortedGroup(dataGroup DataGroup) UnsortedBlock {
+	unsortedMap := make(map[uint64]*ChannelGroup, 0)
+	return UnsortedBlock{
+		dataGroup:         &dataGroup,
+		channelGroupsByID: unsortedMap,
 	}
 }
 
@@ -196,7 +260,7 @@ func (m *MF4) MapAllChannels() map[int]*Channel {
 // The function iterates through the linked list of events, creating EV instances
 // and handling event details such as names, comments, and scopes.
 // If file has no events or errors occur during EV instance creation, it will
-// return `nil`
+// return `nil`.
 func (m *MF4) ListEvents() []*EV.Event {
 	if m.getFirstEvent() == 0 {
 		return nil
@@ -213,6 +277,84 @@ func (m *MF4) ListEvents() []*EV.Event {
 		nextEvent = event.Next()
 	}
 	return r
+}
+
+// Sort is applied for unsorted files.
+func (m *MF4) Sort(us UnsortedBlock) {
+	measures := make(map[uint64][]any)
+
+	for key := range us.channelGroupsByID {
+		measures[key] = []any{}
+	}
+
+	dt := DT.New(m.File, us.dataGroup.block.Link.Data)
+	currentPos, _ := m.File.Seek(0, io.SeekCurrent)
+
+	var lastPos int64 = currentPos
+	dtsize := dt.Header.Length - 24
+	for uint64(lastPos-currentPos) < dtsize {
+		id, err := us.dataGroup.block.BytesOfRecordIDSize(m.File)
+		if err != nil {
+			panic(err)
+		}
+
+		cg := us.channelGroupsByID[id]
+		if cg.Block.IsVLSD() {
+			var sampleLength uint32
+			if err := binary.Read(m.File, binary.LittleEndian, &sampleLength); err != nil {
+				panic(err)
+			}
+
+			bufValue := make([]byte, sampleLength)
+			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
+				panic(err)
+			}
+
+			cn := cg.Channels["vlsd"]
+			size := cn.block.SignalBytesRange()
+			data := make([]byte, size)
+			byteOrder := cn.block.ByteOrder()
+			dataType := cn.block.LoadDataType(len(data))
+			buf := bytes.NewBuffer(bufValue)
+			value, err := parseSignalMeasure(buf, byteOrder, dataType)
+			if err != nil {
+				panic(err)
+			}
+
+			measures[id] = append(measures[id], value)
+		} else {
+			size := cg.Block.Data.DataBytes
+			bufValue := make([]byte, size)
+			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
+				panic(err)
+			}
+
+			for _, cn := range cg.Channels {
+				if cn.isUnsorted {
+					continue
+				}
+				offset := cn.block.Data.ByteOffset
+				bsize := offset + cn.block.Data.BitCount/8
+
+				sizeCh := cn.block.SignalBytesRange()
+				data := make([]byte, sizeCh)
+				byteOrder := cn.block.ByteOrder()
+				dataType := cn.block.LoadDataType(len(data))
+
+				buf := bytes.NewBuffer(bufValue[offset:bsize])
+				value, err := parseSignalMeasure(buf, byteOrder, dataType)
+				if err != nil {
+					panic(err)
+				}
+				measures[id] = append(measures[id], value)
+			}
+
+		}
+		lastPos, _ = m.File.Seek(0, io.SeekCurrent)
+	}
+
+	fmt.Println()
+
 }
 
 func readArrayBlock(file *os.File, addr int64) {
