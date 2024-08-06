@@ -77,7 +77,8 @@ type Channel struct {
 	// additional information about the channel. Can be 'nil'
 	Comment string
 
-	MappedMeasure []interface{}
+	// Samples are cached in memory if file was set with MemoryOptimized is true
+	CachedSamples []interface{}
 
 	// pointer to mf4 file
 	mf4 *MF4
@@ -329,16 +330,20 @@ func (c *Channel) readVLSDSample() ([]interface{}, error) {
 func (c *Channel) Sample() ([]interface{}, error) {
 	var sample []interface{}
 	var err error
-	if c.MappedMeasure == nil {
-		sample, err = c.RawSample()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		sample = c.MappedMeasure
+
+	if c.CachedSamples != nil {
+		return c.CachedSamples, nil
+	}
+
+	sample, err = c.RawSample()
+	if err != nil {
+		return nil, err
 	}
 
 	c.applyConversion(&sample)
+	if !c.mf4.ReadOptions.MemoryOptimized {
+		c.CachedSamples = sample
+	}
 	return sample, nil
 }
 
@@ -349,7 +354,6 @@ func (c *Channel) RawSample() ([]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return sample, nil
 }
 

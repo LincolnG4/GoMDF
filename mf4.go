@@ -11,7 +11,6 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/AT"
 	"github.com/LincolnG4/GoMDF/blocks/CG"
 	"github.com/LincolnG4/GoMDF/blocks/CN"
-	"github.com/LincolnG4/GoMDF/blocks/DG"
 	"github.com/LincolnG4/GoMDF/blocks/DT"
 	"github.com/LincolnG4/GoMDF/blocks/EV"
 	"github.com/LincolnG4/GoMDF/blocks/FH"
@@ -31,37 +30,41 @@ type MF4 struct {
 	//Address to First File History Block
 	FileHistory int64
 
-	DataGroups   []*DG.Block
+	DataGroups   []*DataGroup
 	ChannelGroup []*ChannelGroup
 	Channels     []*Channel
 
 	//Unsorted
 	UnsortedBlocks []*UnsortedBlock
+
+	ReadOptions *ReadOptions
 }
 
 type ReadOptions struct {
-	// MemoryCaching indicates whether to store data in memory or use file-based
-	// storage.
-	// Default is true, measures are cached in memory, which can improve performance
-	// by avoiding file I/O operations but may increase memory usage, particularly
-	// with large datasets.
+	// MemoryOptimized indicates whether to store data in memory or use
+	// file-based storage.
+	// Default is false, measures are cached in memory, which can improve
+	// performance by avoiding file I/O operations but may increase memory usage
+	// , particularly with large datasets.
 	//
-	// If false, measures are saved to a file or re-read as needed. This approach
+	// If true, measures are saved to a file or re-read as needed. This approach
 	// helps manage memory usage more effectively by offloading data to disk,
-	// making it suitable for very large datasets that might exceed available memory
+	// making it suitable for very large datasets that might exceed available
+	// memory
 	MemoryOptimized bool
 
-	// LoadAllChannels indicates whether to load all channels during initialization.
+	// InitAllChannels indicates whether to read all channels during
+	// initialization.
+	// If true, all predefined channels will be created and ready for use
+	// immediately after initialization. This can be useful when you need all
+	// channels available from the start and want to avoid delays caused by
+	// creating channels later on.
 	//
-	// If true, all predefined channels will be created and ready for use immediately
-	// after initialization. This can be useful when you need all channels available
-	// from the start and want to avoid delays caused by creating channels later on.
-	//
-	// If false, channels are created on-demand as they are needed. This approach
-	// can be more memory-efficient if you have a large number of channels or don't
-	// need all of them immediately. It also avoids preallocating resources that might
-	// never be used
-	LoadAllChannels bool
+	// If false, channels are created on-demand as they are needed. This
+	// approach can be more memory-efficient if you have a large number of
+	// channels or don't need all of them immediately. It also avoids
+	// preallocating resources that might never be used
+	//InitAllChannels bool
 }
 
 type UnsortedBlock struct {
@@ -69,11 +72,12 @@ type UnsortedBlock struct {
 	channelGroupsByID map[uint64]*ChannelGroup
 }
 
-func ReadFile(file *os.File) (*MF4, error) {
+func ReadFile(file *os.File, readOptions *ReadOptions) (*MF4, error) {
 	var address int64 = 0
 	mf4File := MF4{
 		File:           file,
 		Identification: ID.New(file, address),
+		ReadOptions:    readOptions,
 	}
 	fileVersion := mf4File.MdfVersion()
 	if fileVersion < 400 {
@@ -104,14 +108,12 @@ func (m *MF4) read() {
 	for nextDataGroupAddress != 0 {
 		var dataGroup DataGroup
 		var UnsortedBlocks UnsortedBlock
-
 		isUnsorted := false
 
 		dataGroup = NewDataGroup(file, nextDataGroupAddress)
-		m.DataGroups = append(m.DataGroups, dataGroup.block)
+		m.DataGroups = append(m.DataGroups, &dataGroup)
 
-		mdCommentAddr := dataGroup.block.MetadataComment()
-		comment = MD.New(file, mdCommentAddr)
+		comment = MD.New(file, dataGroup.block.MetadataComment())
 
 		nextAddressCG := dataGroup.block.FirstChannelGroup()
 		cgIndex := 0
@@ -156,7 +158,6 @@ func (m *MF4) read() {
 					block:             cnBlock,
 					isUnsorted:        false,
 					mf4:               m,
-					MappedMeasure:     nil,
 				}
 
 				// save master channel address
@@ -167,7 +168,7 @@ func (m *MF4) read() {
 
 				// Unsorted file
 				if dataGroup.block.Data.RecIDSize != 0 {
-					cn.MappedMeasure = make([]interface{}, 0)
+					cn.CachedSamples = make([]interface{}, 0)
 					isUnsorted = true
 					if UnsortedBlocks.dataGroup == nil {
 						UnsortedBlocks = newUnsortedGroup(dataGroup)
@@ -240,7 +241,7 @@ func (m *MF4) Sort(us UnsortedBlock) {
 				panic(err)
 			}
 
-			cn.MappedMeasure = append(cn.MappedMeasure, value)
+			cn.CachedSamples = append(cn.CachedSamples, value)
 		} else {
 			size := cg.Block.Data.DataBytes
 			bufValue := make([]byte, size)
@@ -259,7 +260,7 @@ func (m *MF4) Sort(us UnsortedBlock) {
 				if err != nil {
 					panic(err)
 				}
-				cn.MappedMeasure = append(cn.MappedMeasure, value)
+				cn.CachedSamples = append(cn.CachedSamples, value)
 			}
 		}
 		lastPos, _ = m.File.Seek(0, io.SeekCurrent)
@@ -276,8 +277,6 @@ func newUnsortedGroup(dataGroup DataGroup) UnsortedBlock {
 
 // GetChannelSample loads sample based DataGroupName and ChannelName
 func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interface{}, error) {
-	var err error
-
 	cgrp := m.ChannelGroup[indexDataGroup]
 
 	// Does channel exist in datagroup?
@@ -290,13 +289,7 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 	// 	return nil, fmt.Errorf("channel %s has invalid read", channelName)
 	// }
 
-	sample, err := cn.Sample()
-	if err != nil {
-		return nil, err
-	}
-
-	cn.applyConversion(&sample)
-	return sample, nil
+	return cn.Sample()
 }
 
 // ListAllChannelsNames returns an slice with all channels from the MF4 file
@@ -314,8 +307,20 @@ func (m *MF4) ListAllChannelsNames() []string {
 }
 
 // ListAllChannels returns an slice with all channels from the MF4 file
-func (m *MF4) ListAllChannelsFromDataGroup(datagroupIndex int) []*Channel {
-	return m.Channels
+func (m *MF4) ListAllChannelsFromDataGroup(datagroupIndex int) ([]*Channel, error) {
+	if len(m.DataGroups) < datagroupIndex {
+		return nil, fmt.Errorf("datagroup %d doesn't exist", datagroupIndex)
+	}
+
+	var cs []*Channel
+	dg := m.DataGroups[datagroupIndex]
+	for _, cg := range dg.ChannelGroup {
+		for _, c := range cg.Channels {
+			cs = append(cs, c)
+		}
+	}
+
+	return cs, nil
 }
 
 // MapAllChannelsNames returns an map with all channels from the MF4 file group
