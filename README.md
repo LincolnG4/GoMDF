@@ -74,7 +74,7 @@ func main() {
 - Support for Events
 - Access to common metadata fields
 - Documentation
-- API documentation is available at https://godoc.org/github.com/LincolnG4/GoMDF
+- Documentation is available at https://godoc.org/github.com/LincolnG4/GoMDF
 
 ## Contributing
 Pull requests are welcome! Please open any issues.
