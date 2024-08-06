@@ -77,6 +77,8 @@ type Channel struct {
 	// additional information about the channel. Can be 'nil'
 	Comment string
 
+	MappedMeasure *[]interface{}
+
 	// pointer to mf4 file
 	mf4 *MF4
 
@@ -167,6 +169,15 @@ func (c *Channel) readMeasure(isDataList bool) ([]interface{}, error) {
 	return measure, nil
 }
 
+func (c *Channel) readMeasureRow(bufValue []byte) (interface{}, error) {
+	size := c.block.SignalBytesRange()
+	data := make([]byte, size)
+	byteOrder := c.block.ByteOrder()
+	dataType := c.block.LoadDataType(len(data))
+	buf := bytes.NewBuffer(bufValue)
+	return parseSignalMeasure(buf, byteOrder, dataType)
+}
+
 // readMeasureFromSDBlock return extract sample measure from SDBlock or a list of SDBlocks
 func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error) {
 	var measure []interface{}
@@ -252,9 +263,6 @@ func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error)
 // extractSample returns a array with sample extracted from datablock based on
 // header id
 func (c *Channel) extractSample() ([]interface{}, error) {
-	// if c.block.IsVLSD() || c.DataGroup.Data.RecIDSize != 0 {
-	// 	return c.readVLSDSample()
-	// }
 	if c.block.IsVLSD() {
 		return c.readVLSDSample()
 	}
@@ -319,24 +327,30 @@ func (c *Channel) readVLSDSample() ([]interface{}, error) {
 // Sample returns a array with the measures of the channel applying conversion
 // block on it
 func (c *Channel) Sample() ([]interface{}, error) {
-	sample, err := c.RawSample()
-	if err != nil {
-		return nil, err
+	var sample *[]interface{}
+	var err error
+	if c.MappedMeasure == nil {
+		sample, err = c.RawSample()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		sample = c.MappedMeasure
 	}
 
-	c.applyConversion(&sample)
-	return sample, nil
+	c.applyConversion(sample)
+	return *sample, nil
 }
 
 // RawSample returns a array with the measures of the channel not applying
 // conversion block on it
-func (c *Channel) RawSample() ([]interface{}, error) {
+func (c *Channel) RawSample() (*[]interface{}, error) {
 	sample, err := c.extractSample()
 	if err != nil {
 		return nil, err
 	}
 
-	return sample, nil
+	return &sample, nil
 }
 
 // readSDBlock returns measure from SDBlock

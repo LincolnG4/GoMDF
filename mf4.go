@@ -1,7 +1,6 @@
 package mf4
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -132,6 +131,7 @@ func (m *MF4) read() {
 					block:             cnBlock,
 					isUnsorted:        false,
 					mf4:               m,
+					MappedMeasure:     nil,
 				}
 
 				// save master channel address
@@ -142,6 +142,7 @@ func (m *MF4) read() {
 
 				// Unsorted file
 				if dataGroup.block.Data.RecIDSize != 0 {
+					cn.MappedMeasure = new([]interface{})
 					isUnsorted = true
 					if UnsortedBlocks.dataGroup == nil {
 						UnsortedBlocks = newUnsortedGroup(dataGroup)
@@ -181,6 +182,63 @@ func (m *MF4) read() {
 		dgindex++
 	}
 
+}
+
+// Sort is applied for unsorted files.
+func (m *MF4) Sort(us UnsortedBlock) {
+	dt := DT.New(m.File, us.dataGroup.block.Link.Data)
+	currentPos, _ := m.File.Seek(0, io.SeekCurrent)
+
+	var lastPos int64 = currentPos
+	dtsize := dt.Header.Length - 24
+	for uint64(lastPos-currentPos) < dtsize {
+		id, err := us.dataGroup.block.BytesOfRecordIDSize(m.File)
+		if err != nil {
+			panic(err)
+		}
+
+		cg := us.channelGroupsByID[id]
+		if cg.Block.IsVLSD() {
+			var sampleLength uint32
+			if err := binary.Read(m.File, binary.LittleEndian, &sampleLength); err != nil {
+				panic(err)
+			}
+
+			bufValue := make([]byte, sampleLength)
+			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
+				panic(err)
+			}
+
+			cn := cg.Channels["vlsd"]
+			value, err := cn.readMeasureRow(bufValue)
+			if err != nil {
+				panic(err)
+			}
+
+			*cn.MappedMeasure = append(*cn.MappedMeasure, value)
+		} else {
+			size := cg.Block.Data.DataBytes
+			bufValue := make([]byte, size)
+			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
+				panic(err)
+			}
+
+			for _, cn := range cg.Channels {
+				if cn.isUnsorted {
+					continue
+				}
+				offset := cn.block.Data.ByteOffset
+				bsize := offset + cn.block.Data.BitCount/8
+
+				value, err := cn.readMeasureRow(bufValue[offset:bsize])
+				if err != nil {
+					panic(err)
+				}
+				*cn.MappedMeasure = append(*cn.MappedMeasure, value)
+			}
+		}
+		lastPos, _ = m.File.Seek(0, io.SeekCurrent)
+	}
 }
 
 func newUnsortedGroup(dataGroup DataGroup) UnsortedBlock {
@@ -277,84 +335,6 @@ func (m *MF4) ListEvents() []*EV.Event {
 		nextEvent = event.Next()
 	}
 	return r
-}
-
-// Sort is applied for unsorted files.
-func (m *MF4) Sort(us UnsortedBlock) {
-	measures := make(map[uint64][]any)
-
-	for key := range us.channelGroupsByID {
-		measures[key] = []any{}
-	}
-
-	dt := DT.New(m.File, us.dataGroup.block.Link.Data)
-	currentPos, _ := m.File.Seek(0, io.SeekCurrent)
-
-	var lastPos int64 = currentPos
-	dtsize := dt.Header.Length - 24
-	for uint64(lastPos-currentPos) < dtsize {
-		id, err := us.dataGroup.block.BytesOfRecordIDSize(m.File)
-		if err != nil {
-			panic(err)
-		}
-
-		cg := us.channelGroupsByID[id]
-		if cg.Block.IsVLSD() {
-			var sampleLength uint32
-			if err := binary.Read(m.File, binary.LittleEndian, &sampleLength); err != nil {
-				panic(err)
-			}
-
-			bufValue := make([]byte, sampleLength)
-			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
-				panic(err)
-			}
-
-			cn := cg.Channels["vlsd"]
-			size := cn.block.SignalBytesRange()
-			data := make([]byte, size)
-			byteOrder := cn.block.ByteOrder()
-			dataType := cn.block.LoadDataType(len(data))
-			buf := bytes.NewBuffer(bufValue)
-			value, err := parseSignalMeasure(buf, byteOrder, dataType)
-			if err != nil {
-				panic(err)
-			}
-
-			measures[id] = append(measures[id], value)
-		} else {
-			size := cg.Block.Data.DataBytes
-			bufValue := make([]byte, size)
-			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
-				panic(err)
-			}
-
-			for _, cn := range cg.Channels {
-				if cn.isUnsorted {
-					continue
-				}
-				offset := cn.block.Data.ByteOffset
-				bsize := offset + cn.block.Data.BitCount/8
-
-				sizeCh := cn.block.SignalBytesRange()
-				data := make([]byte, sizeCh)
-				byteOrder := cn.block.ByteOrder()
-				dataType := cn.block.LoadDataType(len(data))
-
-				buf := bytes.NewBuffer(bufValue[offset:bsize])
-				value, err := parseSignalMeasure(buf, byteOrder, dataType)
-				if err != nil {
-					panic(err)
-				}
-				measures[id] = append(measures[id], value)
-			}
-
-		}
-		lastPos, _ = m.File.Seek(0, io.SeekCurrent)
-	}
-
-	fmt.Println()
-
 }
 
 func readArrayBlock(file *os.File, addr int64) {
