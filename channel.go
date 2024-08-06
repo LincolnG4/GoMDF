@@ -77,7 +77,7 @@ type Channel struct {
 	// additional information about the channel. Can be 'nil'
 	Comment string
 
-	MappedMeasure *[]interface{}
+	MappedMeasure []interface{}
 
 	// pointer to mf4 file
 	mf4 *MF4
@@ -327,7 +327,7 @@ func (c *Channel) readVLSDSample() ([]interface{}, error) {
 // Sample returns a array with the measures of the channel applying conversion
 // block on it
 func (c *Channel) Sample() ([]interface{}, error) {
-	var sample *[]interface{}
+	var sample []interface{}
 	var err error
 	if c.MappedMeasure == nil {
 		sample, err = c.RawSample()
@@ -338,19 +338,19 @@ func (c *Channel) Sample() ([]interface{}, error) {
 		sample = c.MappedMeasure
 	}
 
-	c.applyConversion(sample)
-	return *sample, nil
+	c.applyConversion(&sample)
+	return sample, nil
 }
 
 // RawSample returns a array with the measures of the channel not applying
 // conversion block on it
-func (c *Channel) RawSample() (*[]interface{}, error) {
+func (c *Channel) RawSample() ([]interface{}, error) {
 	sample, err := c.extractSample()
 	if err != nil {
 		return nil, err
 	}
 
-	return &sample, nil
+	return sample, nil
 }
 
 // readSDBlock returns measure from SDBlock

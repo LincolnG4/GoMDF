@@ -39,6 +39,31 @@ type MF4 struct {
 	UnsortedBlocks []*UnsortedBlock
 }
 
+type ReadOptions struct {
+	// MemoryCaching indicates whether to store data in memory or use file-based
+	// storage.
+	// Default is true, measures are cached in memory, which can improve performance
+	// by avoiding file I/O operations but may increase memory usage, particularly
+	// with large datasets.
+	//
+	// If false, measures are saved to a file or re-read as needed. This approach
+	// helps manage memory usage more effectively by offloading data to disk,
+	// making it suitable for very large datasets that might exceed available memory
+	MemoryOptimized bool
+
+	// LoadAllChannels indicates whether to load all channels during initialization.
+	//
+	// If true, all predefined channels will be created and ready for use immediately
+	// after initialization. This can be useful when you need all channels available
+	// from the start and want to avoid delays caused by creating channels later on.
+	//
+	// If false, channels are created on-demand as they are needed. This approach
+	// can be more memory-efficient if you have a large number of channels or don't
+	// need all of them immediately. It also avoids preallocating resources that might
+	// never be used
+	LoadAllChannels bool
+}
+
 type UnsortedBlock struct {
 	dataGroup         *DataGroup
 	channelGroupsByID map[uint64]*ChannelGroup
@@ -142,7 +167,7 @@ func (m *MF4) read() {
 
 				// Unsorted file
 				if dataGroup.block.Data.RecIDSize != 0 {
-					cn.MappedMeasure = new([]interface{})
+					cn.MappedMeasure = make([]interface{}, 0)
 					isUnsorted = true
 					if UnsortedBlocks.dataGroup == nil {
 						UnsortedBlocks = newUnsortedGroup(dataGroup)
@@ -215,7 +240,7 @@ func (m *MF4) Sort(us UnsortedBlock) {
 				panic(err)
 			}
 
-			*cn.MappedMeasure = append(*cn.MappedMeasure, value)
+			cn.MappedMeasure = append(cn.MappedMeasure, value)
 		} else {
 			size := cg.Block.Data.DataBytes
 			bufValue := make([]byte, size)
@@ -234,7 +259,7 @@ func (m *MF4) Sort(us UnsortedBlock) {
 				if err != nil {
 					panic(err)
 				}
-				*cn.MappedMeasure = append(*cn.MappedMeasure, value)
+				cn.MappedMeasure = append(cn.MappedMeasure, value)
 			}
 		}
 		lastPos, _ = m.File.Seek(0, io.SeekCurrent)
@@ -265,7 +290,7 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 	// 	return nil, fmt.Errorf("channel %s has invalid read", channelName)
 	// }
 
-	sample, err := cn.extractSample()
+	sample, err := cn.Sample()
 	if err != nil {
 		return nil, err
 	}
