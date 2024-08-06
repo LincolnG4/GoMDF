@@ -17,6 +17,7 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/DL"
 	"github.com/LincolnG4/GoMDF/blocks/SD"
 	"github.com/LincolnG4/GoMDF/blocks/SI"
+	"github.com/edsrzf/mmap-go"
 )
 
 type DataGroup struct {
@@ -134,8 +135,21 @@ func (c *Channel) readMeasure(isDataList bool) ([]interface{}, error) {
 	size := cn.SignalBytesRange()
 	rowSize := int64(cg.Data.DataBytes)
 
+	// Create a memory-mapped file
+	file, err := os.Open(c.mf4.File.Name())
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	mmapData, err := mmap.Map(file, mmap.RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer mmapData.Unmap()
+
 	data := make([]byte, size)
-	measure := make([]interface{}, 0)
+	measure := make([]interface{}, 0, cg.Data.CycleCount)
 
 	dataType := cn.LoadDataType(len(data))
 
@@ -151,14 +165,14 @@ func (c *Channel) readMeasure(isDataList bool) ([]interface{}, error) {
 				}
 				k = 0
 			}
-			//Next Data
+			// Next Data
 			offset = dtl.DataSectionLength(k)
 			target += offset
 			readAddr = c.signalValueAddress(dtl.Link.Data[k])
-			k += 1
+			k++
 		}
 
-		seekRead(c.mf4.File, readAddr, data)
+		copy(data, mmapData[readAddr:readAddr+int64(size)])
 		buf := bytes.NewBuffer(data)
 		value, err := parseSignalMeasure(buf, byteOrder, dataType)
 		if err != nil {
@@ -335,7 +349,7 @@ func (c *Channel) Sample() ([]interface{}, error) {
 		return c.CachedSamples, nil
 	}
 
-	sample, err = c.RawSample()
+	sample, err = c.extractSample()
 	if err != nil {
 		return nil, err
 	}
