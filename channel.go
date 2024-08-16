@@ -81,6 +81,9 @@ type Channel struct {
 	// Samples are cached in memory if file was set with MemoryOptimized is true
 	CachedSamples []interface{}
 
+	// Conversion applied
+	isConverted bool
+
 	// pointer to mf4 file
 	mf4 *MF4
 
@@ -419,6 +422,10 @@ func (c *Channel) Sample() ([]interface{}, error) {
 	var err error
 
 	if c.CachedSamples != nil {
+		if !c.isConverted {
+			c.applyConversion(&c.CachedSamples)
+			c.isConverted = true
+		}
 		return c.CachedSamples, nil
 	}
 
@@ -487,6 +494,7 @@ func (c *Channel) applyConversion(sample *[]interface{}) {
 	if c.Conversion == nil {
 		return
 	}
+
 	c.Conversion.Apply(sample)
 }
 

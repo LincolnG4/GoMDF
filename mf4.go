@@ -249,7 +249,6 @@ func (m *MF4) Sort(us UnsortedBlock) error {
 			if err != nil {
 				panic(err)
 			}
-
 			cn.CachedSamples = append(cn.CachedSamples, value)
 		} else {
 			size := cg.Block.Data.DataBytes
