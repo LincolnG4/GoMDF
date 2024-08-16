@@ -1,8 +1,10 @@
 package HD
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/blocks"
@@ -41,40 +43,47 @@ const blockID string = blocks.HdID
 //
 // The HDBLOCK always begins at file position 64. It contains general information about the
 // contents of the measured data file and is the root for the block hierarchy.
-func New(file *os.File, startAdress int64) *Block {
+func New(file *os.File, startAddress int64) (*Block, error) {
 	var b Block
-	var err error
 
+	// Initialize the Header
 	b.Header = blocks.Header{}
 
-	b.Header, err = blocks.GetHeader(file, startAdress, blocks.HdID)
+	// Get the header from the file
+	var err error
+	b.Header, err = blocks.GetHeader(file, startAddress, blocks.HdID)
 	if err != nil {
-		return b.BlankBlock()
+		return b.BlankBlock(), err
 	}
 
-	//Calculates size of Link Block
-	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	b.Link = Link{}
-	buf := blocks.LoadBuffer(file, blockSize)
-
-	//Create a buffer based on blocksize
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
-	if BinaryError != nil {
-		fmt.Println("error", BinaryError)
+	// Calculate size and read the Link Block
+	linkBlockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
+	linkBuffer := make([]byte, linkBlockSize)
+	if _, err := io.ReadFull(file, linkBuffer); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading link block: %w", err)
 	}
 
-	//Calculates size of Data Block
-	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
-	b.Data = Data{}
-	buf = blocks.LoadBuffer(file, blockSize)
-
-	//Create a buffer based on blocksize
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
-	if BinaryError != nil {
-		fmt.Println("error", BinaryError)
+	// Read Link Block from buffer
+	linkReader := bytes.NewReader(linkBuffer)
+	if err := binary.Read(linkReader, binary.LittleEndian, &b.Link); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error decoding link block: %w", err)
 	}
 
-	return &b
+	// Calculate size and read the Data Block
+	dataBlockSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	dataBuffer := make([]byte, dataBlockSize)
+	if _, err := io.ReadFull(file, dataBuffer); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading data block: %w", err)
+	}
+
+	// Read Data Block from buffer
+	dataReader := bytes.NewReader(dataBuffer)
+	if err := binary.Read(dataReader, binary.LittleEndian, &b.Data); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error decoding data block: %w", err)
+	}
+
+	return &b, nil
+
 }
 
 func (b *Block) BlankBlock() *Block {

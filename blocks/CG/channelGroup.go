@@ -1,8 +1,10 @@
 package CG
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/blocks"
@@ -50,32 +52,35 @@ type Data struct {
 
 const blockID string = blocks.CgID
 
-func New(file *os.File, version uint16, startAdress int64) *Block {
+func New(file *os.File, version uint16, startAddress int64) (*Block, error) {
 	var b Block
-	var err error
 
+	// Initialize the header
 	b.Header = blocks.Header{}
 
-	b.Header, err = blocks.GetHeader(file, startAdress, blocks.CgID)
+	// Read the header
+	var err error
+	b.Header, err = blocks.GetHeader(file, startAddress, blocks.CgID)
 	if err != nil {
-		return b.BlankBlock()
+		return b.BlankBlock(), err
 	}
 
-	//Calculates size of Link Block
-	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	buffEach := make([]byte, blockSize)
+	// Calculate size of Link Block
+	linkBlockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
+	linkBuffer := make([]byte, linkBlockSize)
 
-	// Read the Link section from the binary file
-	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
-		fmt.Println("error reading link section channelgroup:", err)
+	// Read the Link section into the buffer
+	if _, err := io.ReadFull(file, linkBuffer); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading link section channelgroup: %w", err)
 	}
 
-	// Populate the Link fields dynamically based on version
-	linkFields := []int64{}
-	for i := 0; i < len(buffEach)/8; i++ {
-		linkFields = append(linkFields, int64(binary.LittleEndian.Uint64(buffEach[i*8:(i+1)*8])))
+	// Extract Link fields from the buffer
+	linkFields := make([]int64, linkBlockSize/8)
+	for i := range linkFields {
+		linkFields[i] = int64(binary.LittleEndian.Uint64(linkBuffer[i*8 : (i+1)*8]))
 	}
 
+	// Populate the Link fields
 	b.Link = Link{
 		Next:        linkFields[0],
 		CnFirst:     linkFields[1],
@@ -86,20 +91,26 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 	}
 
 	if version >= blocks.Version420 {
-		linkFields = append(linkFields, blocks.ReadInt64FromBinary(file))
-		b.Link.CgMaster = linkFields[6]
+		// Read additional field for versions >= 420
+		masterField := blocks.ReadInt64FromBinary(file)
+		b.Link.CgMaster = masterField
 	}
 
-	//Calculates size of Data Block
-	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
-	buf := blocks.LoadBuffer(file, blockSize)
+	// Calculate size of Data Block
+	dataBlockSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	dataBuffer := make([]byte, dataBlockSize)
 
-	// Create a buffer based on block size
-	if err := binary.Read(buf, binary.LittleEndian, &b.Data); err != nil {
-		fmt.Println("error reading data section channelgroup", err)
+	// Read the Data section into the buffer
+	if _, err := io.ReadFull(file, dataBuffer); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading data section channelgroup: %w", err)
 	}
 
-	return &b
+	// Populate the Data struct
+	if err := binary.Read(bytes.NewReader(dataBuffer), binary.LittleEndian, &b.Data); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error parsing data section channelgroup: %w", err)
+	}
+
+	return &b, nil
 }
 
 func (b *Block) getFlag() uint16 {

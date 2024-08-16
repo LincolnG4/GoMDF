@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"reflect"
 
@@ -17,7 +18,6 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/DL"
 	"github.com/LincolnG4/GoMDF/blocks/SD"
 	"github.com/LincolnG4/GoMDF/blocks/SI"
-	"github.com/edsrzf/mmap-go"
 )
 
 type DataGroup struct {
@@ -109,78 +109,151 @@ func parseSignalMeasure(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType 
 	}
 }
 
+func parseSignalMeasure2(data []byte, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
+	switch v := dataType.(type) {
+	case string:
+		return string(data), nil
+	case []uint8:
+		return hex.EncodeToString(data), nil
+	case int8:
+		return int8(data[0]), nil
+	case uint8:
+		return data[0], nil
+	case int16:
+		if len(data) < 2 {
+			return nil, fmt.Errorf("not enough data to read int16")
+		}
+		return int16(byteOrder.Uint16(data)), nil
+	case uint16:
+		if len(data) < 2 {
+			return nil, fmt.Errorf("not enough data to read uint16")
+		}
+		return byteOrder.Uint16(data), nil
+	case int32:
+		if len(data) < 4 {
+			return nil, fmt.Errorf("not enough data to read int32")
+		}
+		return int32(byteOrder.Uint32(data)), nil
+	case uint32:
+		if len(data) < 4 {
+			return nil, fmt.Errorf("not enough data to read uint32")
+		}
+		return byteOrder.Uint32(data), nil
+	case int64:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("not enough data to read int64")
+		}
+		return int64(byteOrder.Uint64(data)), nil
+	case uint64:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("not enough data to read uint64")
+		}
+		return byteOrder.Uint64(data), nil
+	case float32:
+		if len(data) < 4 {
+			return nil, fmt.Errorf("not enough data to read float32")
+		}
+		return math.Float32frombits(byteOrder.Uint32(data)), nil
+	case float64:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("not enough data to read float64")
+		}
+		return math.Float64frombits(byteOrder.Uint64(data)), nil
+	default:
+		return nil, fmt.Errorf("unsupported data type: %T", v)
+	}
+}
+
 // readMeasure return extract sample measure from DTBlock//DLBlock with fixed
 // lenght
-func (c *Channel) readMeasure(isDataList bool) ([]interface{}, error) {
-	cn := c.block
-	cg := c.ChannelGroup
-
+func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
 	var dtl *DL.Block
 	var err error
 	var readAddr int64
+	var dataBlockSize uint64
 
+	// Byte slice order conversion
+	byteOrder := c.block.ByteOrder()
+
+	// Get configuration
+	size := c.block.SignalBytesRange()
+	rowSize := int64(c.ChannelGroup.Data.DataBytes)
+	dataType := c.block.LoadDataType(int(size))
+
+	readAddr = c.datablockAddress(c.DataGroup.Link.Data)
+	length, err := blocks.GetLength(c.mf4.File, readAddr)
+	if err != nil {
+		return nil, err
+	}
+	buffer := make([]byte, length)
+
+	// Create a large buffer to read the entire data at once
 	if isDataList {
 		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), c.DataGroup.Link.Data)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		readAddr = c.signalValueAddress(c.DataGroup.Link.Data)
+		_, err = io.ReadFull(c.mf4.File, buffer)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// byte slice order convert
-	byteOrder := cn.ByteOrder()
-
-	// get config
-	size := cn.SignalBytesRange()
-	rowSize := int64(cg.Data.DataBytes)
-
-	// Create a memory-mapped file
-	file, err := os.Open(c.mf4.File.Name())
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	mmapData, err := mmap.Map(file, mmap.RDONLY, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer mmapData.Unmap()
-
-	data := make([]byte, size)
-	measure := make([]interface{}, 0, cg.Data.CycleCount)
-
-	dataType := cn.LoadDataType(len(data))
+	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
 
 	var offset, target uint64
 	k := 0
+	pos := int64(c.block.Data.ByteOffset)
 	for i := uint64(0); i < c.ChannelGroup.Data.CycleCount; i++ {
 		if i == target && isDataList {
 			// Next list
 			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
 				dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), dtl.Next())
 				if err != nil {
+
 					return nil, err
 				}
 				k = 0
 			}
-			// Next Data
+			//Next Data
 			offset = dtl.DataSectionLength(k)
 			target += offset
-			readAddr = c.signalValueAddress(dtl.Link.Data[k])
-			k++
-		}
 
-		copy(data, mmapData[readAddr:readAddr+int64(size)])
-		buf := bytes.NewBuffer(data)
-		value, err := parseSignalMeasure(buf, byteOrder, dataType)
+			readAddr = c.datablockAddress(dtl.Link.Data[k])
+
+			if _, err = c.mf4.File.Seek(readAddr, io.SeekStart); err != nil {
+				return nil, err
+			}
+			length, err := blocks.GetLength(c.mf4.File, readAddr)
+			if err != nil {
+				return nil, err
+			}
+			if length != dataBlockSize {
+				buffer = make([]byte, length)
+				dataBlockSize = length
+			}
+
+			_, err = io.ReadFull(c.mf4.File, buffer)
+			if err != nil {
+				return nil, err
+			}
+			pos = int64(c.block.Data.ByteOffset)
+			k += 1
+		}
+		// Safely slice the buffer
+		data := buffer[pos : pos+int64(size)]
+
+		value, err := parseSignalMeasure2(data, byteOrder, dataType)
 		if err != nil {
 			return nil, err
 		}
 		measure = append(measure, value)
-		readAddr += rowSize
+
+		pos += rowSize
+
 	}
+
 	return measure, nil
 }
 
@@ -387,7 +460,7 @@ func (c *Channel) readListOfSDBlock() ([]interface{}, error) {
 
 // readSingleDataBlock returns measure from DTBlock
 func (c *Channel) readSingleDataBlock() ([]interface{}, error) {
-	return c.readMeasure(false)
+	return c.readSingleChannel(false)
 }
 
 // readSingleDataBlock returns measure from DTBlock
@@ -397,12 +470,17 @@ func (c *Channel) readSingleDataBlockVLSD() ([]interface{}, error) {
 
 // readDataList returns measure from DLBlock
 func (c *Channel) readDataList() ([]interface{}, error) {
-	return c.readMeasure(true)
+	return c.readSingleChannel(true)
 }
 
 // signalValueAddress returns the offset from the signal in the DTBlock
 func (c *Channel) signalValueAddress(dataAddress int64) int64 {
-	return int64(blocks.HeaderSize) + dataAddress + int64(c.block.Data.ByteOffset)
+	return int64(blocks.HeaderSize) + dataAddress
+}
+
+// signalValueAddress returns the offset from the signal in the DTBlock
+func (c *Channel) datablockAddress(dataAddress int64) int64 {
+	return dataAddress
 }
 
 func (c *Channel) applyConversion(sample *[]interface{}) {

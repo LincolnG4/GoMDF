@@ -1,8 +1,10 @@
 package CC
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"sort"
@@ -120,32 +122,33 @@ type BitfieldText struct {
 	Links   []float64
 }
 
-func New(file *os.File, startAdress int64) (*Block, error) {
+func New(file *os.File, startAddress int64) (*Block, error) {
 	var b Block
-	var err error
 
+	// Initialize the header
 	b.Header = blocks.Header{}
 
-	b.Header, err = blocks.GetHeader(file, startAdress, blocks.CcID)
+	// Read the header
+	var err error
+	b.Header, err = blocks.GetHeader(file, startAddress, blocks.CcID)
 	if err != nil {
 		return b.BlankBlock(), err
 	}
 
-	//Calculates size of Link Block
-	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	buffEach := make([]byte, blockSize)
-
-	// Read the Link section from the binary file
-	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
-		fmt.Println("error reading link section ccblock:", err)
+	// Calculate the size of the Link Block and read directly
+	linkBlockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
+	linkBuffer := make([]byte, linkBlockSize)
+	if _, err := io.ReadFull(file, linkBuffer); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading link section ccblock: %w", err)
 	}
 
-	// Populate the Link fields dynamically based on version
-	linkFields := []int64{}
-	for i := 0; i < len(buffEach)/8; i++ {
-		linkFields = append(linkFields, int64(binary.LittleEndian.Uint64(buffEach[i*8:(i+1)*8])))
+	// Extract Link fields from the buffer
+	linkFields := make([]int64, linkBlockSize/8)
+	for i := range linkFields {
+		linkFields[i] = int64(binary.LittleEndian.Uint64(linkBuffer[i*8 : (i+1)*8]))
 	}
 
+	// Populate the Link struct
 	b.Link = Link{
 		TxName:    linkFields[0],
 		MdUnit:    linkFields[1],
@@ -154,33 +157,41 @@ func New(file *os.File, startAdress int64) (*Block, error) {
 		Ref:       linkFields[4:],
 	}
 
-	//Calculates size of Data Block
-	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
-	b.Data = Data{}
-	buf := blocks.LoadBuffer(file, blockSize)
+	// Calculate the size of the Data Block and read directly
+	dataBlockSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	dataBuffer := make([]byte, dataBlockSize)
+	if _, err := io.ReadFull(file, dataBuffer); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading data section ccblock: %w", err)
+	}
 
-	names := make([]interface{}, 7)
-	names[0] = &b.Data.Type
-	names[1] = &b.Data.Precision
-	names[2] = &b.Data.Flags
-	names[3] = &b.Data.RefCount
-	names[4] = &b.Data.ValCount
-	names[5] = &b.Data.PhyRangeMin
-	names[6] = &b.Data.PhyRangeMax
+	// Create a reader for the data buffer
+	dataReader := bytes.NewReader(dataBuffer)
 
-	for i := 0; i < len(names); i++ {
-		BinaryError := binary.Read(buf, binary.LittleEndian, names[i])
-		if BinaryError != nil {
-			fmt.Println("error loading data from ccblock:", BinaryError)
+	// Define pointers to the fields to be read
+	names := []interface{}{
+		&b.Data.Type,
+		&b.Data.Precision,
+		&b.Data.Flags,
+		&b.Data.RefCount,
+		&b.Data.ValCount,
+		&b.Data.PhyRangeMin,
+		&b.Data.PhyRangeMax,
+	}
+
+	// Read data fields into the Data struct
+	for _, name := range names {
+		if err := binary.Read(dataReader, binary.LittleEndian, name); err != nil {
+			return b.BlankBlock(), fmt.Errorf("error loading data from ccblock: %w", err)
 		}
 	}
 
-	valcount := make([]float64, b.Data.ValCount)
-	BinaryError := binary.Read(buf, binary.LittleEndian, valcount)
-	if BinaryError != nil {
-		fmt.Println("error loading data from ccblock:", BinaryError)
+	// Read Val array
+	valCount := b.Data.ValCount
+	vals := make([]float64, valCount)
+	if err := binary.Read(dataReader, binary.LittleEndian, vals); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error loading data from ccblock: %w", err)
 	}
-	b.Data.Val = valcount
+	b.Data.Val = vals
 
 	return &b, nil
 }

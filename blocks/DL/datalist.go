@@ -24,7 +24,7 @@ type Data struct {
 	Flags          uint8
 	Reserved       [3]byte
 	Count          uint32
-	EqualLegth     uint64
+	EqualLength    uint64
 	Offset         []uint64
 	TimeValues     []float64
 	AngleValues    []float64
@@ -32,7 +32,7 @@ type Data struct {
 }
 
 const (
-	EqualLegth = iota
+	EqualLength = iota
 	//version 4.2.0
 	Time
 	Angle
@@ -90,8 +90,8 @@ func New(file *os.File, version uint16, startAdress int64) (*Block, error) {
 		return b.BlankBlock(), err
 	}
 
-	if blocks.IsBitSet(int(b.Data.Flags), EqualLegth) {
-		err = binary.Read(buf, binary.LittleEndian, &b.Data.EqualLegth)
+	if blocks.IsBitSet(int(b.Data.Flags), EqualLength) {
+		err = binary.Read(buf, binary.LittleEndian, &b.Data.EqualLength)
 		if err != nil {
 			return b.BlankBlock(), err
 		}
@@ -122,30 +122,33 @@ func New(file *os.File, version uint16, startAdress int64) (*Block, error) {
 	return &b, nil
 }
 
-func (b *Block) Concatenate(file *os.File) *DT.Block {
+func (b *Block) Concatenate(file *os.File) (*DT.Block, error) {
 	samples := make([]byte, 0)
 	for i := 0; i < int(b.Data.Count)-1; i++ {
-		dt := DT.New(file, b.Link.Data[i])
+		dt, err := DT.New(file, b.Link.Data[i])
+		if err != nil {
+			return nil, err
+		}
 		samples = append(samples, dt.Data...)
 	}
 	return &DT.Block{
 		Header: blocks.Header{
 			ID:        [4]byte{'#', '#', 'D', 'T'},
 			Reserved:  [4]byte{},
-			Length:    24 + uint64(b.Data.Count)*(b.Data.EqualLegth-24),
+			Length:    24 + uint64(b.Data.Count)*(b.Data.EqualLength-24),
 			LinkCount: 0,
 		},
 		Data: samples,
-	}
+	}, nil
 }
 
-// DataSectionLength returns offset based on datablock. If DTblock has EqualLegth, `variableOffsetIndex`
+// DataSectionLength returns offset based on datablock. If DTblock has EqualLength, `variableOffsetIndex`
 // will be ignored.
 func (b *Block) DataSectionLength(variableOffsetIndex int) uint64 {
 	if len(b.Data.Offset) > 0 {
 		return b.Data.Offset[variableOffsetIndex]
 	}
-	return b.Data.EqualLegth / 16
+	return b.Data.EqualLength / 16
 }
 
 func (b *Block) DataBlockType() string {

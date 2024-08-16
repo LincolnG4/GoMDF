@@ -28,41 +28,36 @@ type Data struct {
 	Reserved  [7]byte
 }
 
-func New(file *os.File, startAdress int64) *Block {
+func New(file *os.File, startAddress int64) *Block {
 	var b Block
-	var err error
 
+	// Initialize header
+	var err error
 	b.Header = blocks.Header{}
 
-	b.Header, err = blocks.GetHeader(file, startAdress, blocks.DgID)
+	// Load Header
+	b.Header, err = blocks.GetHeader(file, startAddress, blocks.DgID)
 	if err != nil {
+		return b.BlankBlock() // Early return on error
+	}
+
+	b.Link = Link{}
+
+	// Read the Link block directly into b.Link
+	if err := binary.Read(file, binary.LittleEndian, &b.Link); err != nil {
+		fmt.Println("error reading link section dgblock:", err)
 		return b.BlankBlock()
 	}
 
-	//Calculates size of Link Block
-	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	b.Link = Link{}
-	buf := blocks.LoadBuffer(file, blockSize)
-
-	//Create a buffer based on blocksize
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
-	if BinaryError != nil {
-		fmt.Println("error reading link section dgblock:", BinaryError)
-	}
-
-	//Calculates size of Data Block
-	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
 	b.Data = Data{}
-	buf = blocks.LoadBuffer(file, blockSize)
 
-	//Create a buffer based on blocksize
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
-	if BinaryError != nil {
-		fmt.Println("error data section from dgblock:", BinaryError)
+	// Read the Data block directly into b.Data
+	if err := binary.Read(file, binary.LittleEndian, &b.Data); err != nil {
+		fmt.Println("error reading data section dgblock:", err)
+		return b.BlankBlock()
 	}
 
 	return &b
-
 }
 
 // BytesOfRecordIDSize returns number of Bytes used for record IDs in the data

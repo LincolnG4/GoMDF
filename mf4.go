@@ -120,7 +120,10 @@ func (m *MF4) read() {
 		for nextAddressCG != 0 {
 			var masterChannel Channel
 
-			cgBlock := CG.New(file, version, nextAddressCG)
+			cgBlock, err := CG.New(file, version, nextAddressCG)
+			if err != nil {
+				panic(err)
+			}
 
 			channelGroup := &ChannelGroup{
 				Block:      cgBlock,
@@ -179,7 +182,11 @@ func (m *MF4) read() {
 						vsldMap := make(map[string]*Channel)
 						vsldMap["vlsd"] = cn
 						cn.isUnsorted = true
-						VLSDBlock := CG.New(file, version, cnBlock.Link.Data)
+						VLSDBlock, err := CG.New(file, version, cnBlock.Link.Data)
+						if err != nil {
+							panic(err)
+						}
+
 						VLSD := &ChannelGroup{
 							Block:      VLSDBlock,
 							Channels:   vsldMap,
@@ -207,12 +214,14 @@ func (m *MF4) read() {
 		nextDataGroupAddress = dataGroup.block.Next()
 		dgindex++
 	}
-
 }
 
 // Sort is applied for unsorted files.
-func (m *MF4) Sort(us UnsortedBlock) {
-	dt := DT.New(m.File, us.dataGroup.block.Link.Data)
+func (m *MF4) Sort(us UnsortedBlock) error {
+	dt, err := DT.New(m.File, us.dataGroup.block.Link.Data)
+	if err != nil {
+		return err
+	}
 	currentPos, _ := m.File.Seek(0, io.SeekCurrent)
 
 	var lastPos int64 = currentPos
@@ -265,6 +274,7 @@ func (m *MF4) Sort(us UnsortedBlock) {
 		}
 		lastPos, _ = m.File.Seek(0, io.SeekCurrent)
 	}
+	return nil
 }
 
 func newUnsortedGroup(dataGroup DataGroup) UnsortedBlock {
@@ -466,7 +476,8 @@ func (m *MF4) ReadChangeLog() []string {
 	r := make([]string, 0)
 	nextAddressFH := m.getFileHistory()
 	for nextAddressFH != 0 {
-		fhBlock := FH.New(m.File, nextAddressFH)
+		fhBlock, _ := FH.New(m.File, nextAddressFH)
+
 		c := fhBlock.GetChangeLog(m.File)
 		t := fhBlock.GetTimeNs()
 		f := fhBlock.GetTimeFlag()
@@ -528,7 +539,11 @@ func (m *MF4) getTimeClass() uint8 {
 }
 
 func (m *MF4) loadHeader() {
-	m.Header = HD.New(m.File, blocks.IdblockSize)
+	var err error
+	m.Header, err = HD.New(m.File, blocks.IdblockSize)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (m *MF4) getHeaderMdComment() int64 {

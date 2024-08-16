@@ -1,6 +1,7 @@
 package DT
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -14,31 +15,33 @@ type Block struct {
 	Data   []byte
 }
 
-func New(file *os.File, startAdress int64) *Block {
-	var blockSize uint64 = blocks.HeaderSize
+func New(file *os.File, startAddress int64) (*Block, error) {
 	var b Block
 
-	_, errs := file.Seek(startAdress, 0)
-	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "memory addr out of size")
+	// Seek to the start address
+	if _, err := file.Seek(startAddress, io.SeekStart); err != nil {
+		if err != io.EOF {
+			return b.BlankBlock(), fmt.Errorf("error seeking to address %d: %w", startAddress, err)
 		}
-		return b.BlankBlock()
+		return b.BlankBlock(), fmt.Errorf("EOF reached while seeking to address %d", startAddress)
 	}
 
-	b.Header = blocks.Header{}
-
-	//Create a buffer based on blocksize
-	buf := blocks.LoadBuffer(file, blockSize)
-
-	//Read header
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
-	if BinaryError != nil {
-		fmt.Println("error", BinaryError)
-		return b.BlankBlock()
+	// Calculate the size of the Header and read it directly
+	headerSize := blocks.HeaderSize
+	headerBuffer := make([]byte, headerSize)
+	if _, err := io.ReadFull(file, headerBuffer); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading header: %w", err)
 	}
 
-	return &b
+	// Create a reader from the buffer
+	headerReader := bytes.NewReader(headerBuffer)
+
+	// Read the header
+	if err := binary.Read(headerReader, binary.LittleEndian, &b.Header); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error decoding header: %w", err)
+	}
+
+	return &b, nil
 }
 
 func (b *Block) DataBlockType() string {
