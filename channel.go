@@ -424,7 +424,7 @@ func (c *Channel) Sample() ([]interface{}, error) {
 	if c.CachedSamples != nil {
 		if !c.isConverted {
 			c.applyConversion(&c.CachedSamples)
-			c.isConverted = true
+
 		}
 		return c.CachedSamples, nil
 	}
@@ -496,6 +496,7 @@ func (c *Channel) applyConversion(sample *[]interface{}) {
 	}
 
 	c.Conversion.Apply(sample)
+	c.isConverted = true
 }
 
 func (c *Channel) readInvalidationBit(file *os.File) (bool, error) {
