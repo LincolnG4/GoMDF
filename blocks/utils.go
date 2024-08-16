@@ -73,77 +73,80 @@ func SplitIdToArray(inputString string) [4]byte {
 	return byteArray
 }
 
-func GetHeader(file *os.File, startAdress int64, blockID string) (Header, error) {
-	var blockSize uint64 = HeaderSize
-
+func GetHeader(file *os.File, startAddress int64, blockID string) (Header, error) {
 	head := Header{}
 
-	_, errs := file.Seek(startAdress, 0)
+	// Seek to the start address
+	_, errs := file.Seek(startAddress, 0)
 	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "memory addr out of size")
-		}
+		return Header{}, fmt.Errorf("failed to seek to start address: %v", errs)
 	}
 
-	//Create a buffer based on blocksize
-	buf := LoadBuffer(file, blockSize)
-
-	//Read header
-	err := binary.Read(buf, binary.LittleEndian, &head)
+	// Read directly into the header struct
+	err := binary.Read(file, binary.LittleEndian, &head)
 	if err != nil {
-		return Header{}, fmt.Errorf("invalid block")
+		return Header{}, fmt.Errorf("failed to read header: %v", err)
 	}
 
+	// Check if the block ID matches
 	if string(head.ID[:]) != blockID {
-		return Header{}, fmt.Errorf("invalid block id")
+		return Header{}, fmt.Errorf("invalid block ID")
 	}
 
 	return head, nil
 }
 
-func GetHeaderID(file *os.File, startAdress int64) (string, error) {
-	var blockSize uint64 = HeaderSize
-
+func GetLength(file *os.File, startAddress int64) (uint64, error) {
 	head := Header{}
 
-	_, errs := file.Seek(startAdress, 0)
+	// Seek to the start address
+	_, errs := file.Seek(startAddress, 0)
 	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "memory addr out of size")
-		}
+		return 0, fmt.Errorf("failed to seek to start address: %v", errs)
 	}
 
-	//Create a buffer based on blocksize
-	buf := LoadBuffer(file, blockSize)
-
-	//Read header
-	err := binary.Read(buf, binary.LittleEndian, &head)
+	// Read the header directly from the file into the struct
+	err := binary.Read(file, binary.LittleEndian, &head)
 	if err != nil {
-		return "", fmt.Errorf("invalid block")
+		return 0, fmt.Errorf("failed to read header: %v", err)
 	}
 
+	// Return the length minus the header size
+	return head.Length - HeaderSize, nil
+}
+
+func GetHeaderID(file *os.File, startAddress int64) (string, error) {
+	head := Header{}
+
+	// Seek to the start address
+	_, err := file.Seek(startAddress, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to seek to start address: %v", err)
+	}
+
+	// Read directly into the header struct
+	err = binary.Read(file, binary.LittleEndian, &head)
+	if err != nil {
+		return "", fmt.Errorf("failed to read header: %v", err)
+	}
+
+	// Return the header ID as a string
 	return string(head.ID[:]), nil
 }
 
-func GetBlockType(file *os.File, startAdress int64) (Header, error) {
-	var blockSize uint64 = HeaderSize
-
+func GetBlockType(file *os.File, startAddress int64) (Header, error) {
 	head := Header{}
 
-	_, errs := file.Seek(startAdress, 0)
-	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "memory addr out of size")
-		}
+	// Seek to the start address
+	_, err := file.Seek(startAddress, 0)
+	if err != nil {
+		return Header{}, fmt.Errorf("failed to seek to start address: %v", err)
 	}
 
-	//Create a buffer based on blocksize
-	buf := LoadBuffer(file, blockSize)
-
-	//Read header
-	BinaryError := binary.Read(buf, binary.LittleEndian, &head)
-	if BinaryError != nil {
-		return Header{}, fmt.Errorf("invalid block")
+	// Read directly into the header struct
+	err = binary.Read(file, binary.LittleEndian, &head)
+	if err != nil {
+		return Header{}, fmt.Errorf("failed to read header: %v", err)
 	}
 
 	return head, nil

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"reflect"
 
@@ -19,12 +20,26 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/SI"
 )
 
+type DataGroup struct {
+	block        *DG.Block
+	ChannelGroup []*ChannelGroup
+}
+
+func NewDataGroup(f *os.File, address int64) DataGroup {
+	dataGroupBlock := DG.New(f, address)
+	return DataGroup{
+		block:        dataGroupBlock,
+		ChannelGroup: []*ChannelGroup{},
+	}
+}
+
 type ChannelGroup struct {
-	Block      *CG.Block
-	Channels   map[string]*Channel
-	DataGroup  *DG.Block
-	SourceInfo SI.SourceInfo
-	Comment    string
+	Block       *CG.Block
+	Channels    map[string]*Channel
+	DataGroup   *DG.Block
+	SourceInfo  SI.SourceInfo
+	Comment     string
+	IsVLSDBlock bool
 }
 
 type Channel struct {
@@ -54,13 +69,22 @@ type Channel struct {
 	// channel group's index
 	ChannelGroupIndex int
 
+	// unsorted channels mapped
+	isUnsorted bool
+
 	// describes the source of an acquisition mode or of a signal
 	SourceInfo SI.SourceInfo
 
 	// additional information about the channel. Can be 'nil'
 	Comment string
 
-	//pointer to mf4 file
+	// Samples are cached in memory if file was set with MemoryOptimized is true
+	CachedSamples []interface{}
+
+	// Conversion applied
+	isConverted bool
+
+	// pointer to mf4 file
 	mf4 *MF4
 
 	// pointer to the CNBLOCK
@@ -88,45 +112,109 @@ func parseSignalMeasure(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType 
 	}
 }
 
-// readMeasure return extract sample measure from DTBlock//DLBlock
-func (c *Channel) readMeasure(file *os.File, version uint16, isDataList bool) ([]interface{}, error) {
-	// init
-	cn := c.block
-	cg := c.ChannelGroup
+func parseSignalMeasure2(data []byte, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
+	switch v := dataType.(type) {
+	case string:
+		return string(data), nil
+	case []uint8:
+		return hex.EncodeToString(data), nil
+	case int8:
+		return int8(data[0]), nil
+	case uint8:
+		return data[0], nil
+	case int16:
+		if len(data) < 2 {
+			return nil, fmt.Errorf("not enough data to read int16")
+		}
+		return int16(byteOrder.Uint16(data)), nil
+	case uint16:
+		if len(data) < 2 {
+			return nil, fmt.Errorf("not enough data to read uint16")
+		}
+		return byteOrder.Uint16(data), nil
+	case int32:
+		if len(data) < 4 {
+			return nil, fmt.Errorf("not enough data to read int32")
+		}
+		return int32(byteOrder.Uint32(data)), nil
+	case uint32:
+		if len(data) < 4 {
+			return nil, fmt.Errorf("not enough data to read uint32")
+		}
+		return byteOrder.Uint32(data), nil
+	case int64:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("not enough data to read int64")
+		}
+		return int64(byteOrder.Uint64(data)), nil
+	case uint64:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("not enough data to read uint64")
+		}
+		return byteOrder.Uint64(data), nil
+	case float32:
+		if len(data) < 4 {
+			return nil, fmt.Errorf("not enough data to read float32")
+		}
+		return math.Float32frombits(byteOrder.Uint32(data)), nil
+	case float64:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("not enough data to read float64")
+		}
+		return math.Float64frombits(byteOrder.Uint64(data)), nil
+	default:
+		return nil, fmt.Errorf("unsupported data type: %T", v)
+	}
+}
 
+// readMeasure return extract sample measure from DTBlock//DLBlock with fixed
+// lenght
+func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
 	var dtl *DL.Block
 	var err error
 	var readAddr int64
+	var dataBlockSize uint64
 
+	// Byte slice order conversion
+	byteOrder := c.block.ByteOrder()
+
+	// Get configuration
+	size := c.block.SignalBytesRange()
+	rowSize := int64(c.ChannelGroup.Data.DataBytes)
+	dataType := c.block.LoadDataType(int(size))
+
+	readAddr = c.datablockAddress(c.DataGroup.Link.Data)
+	length, err := blocks.GetLength(c.mf4.File, readAddr)
+	if err != nil {
+		return nil, err
+	}
+	buffer := make([]byte, length)
+
+	// Create a large buffer to read the entire data at once
 	if isDataList {
-		dtl, err = DL.New(file, version, c.DataGroup.Link.Data)
+		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), c.DataGroup.Link.Data)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		readAddr = c.signalValueAddress(c.DataGroup.Link.Data)
+		_, err = io.ReadFull(c.mf4.File, buffer)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// byte slice order convert
-	byteOrder := cn.ByteOrder()
-
-	// get config
-	size := cn.SignalBytesRange()
-	rowSize := int64(cg.Data.DataBytes)
-
-	data := make([]byte, size)
-	measure := make([]interface{}, 0)
-
-	dataType := cn.LoadDataType(len(data))
+	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
 
 	var offset, target uint64
 	k := 0
+	pos := int64(c.block.Data.ByteOffset)
 	for i := uint64(0); i < c.ChannelGroup.Data.CycleCount; i++ {
 		if i == target && isDataList {
 			// Next list
 			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
-				dtl, err = DL.New(file, version, dtl.Next())
+				dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), dtl.Next())
 				if err != nil {
+
 					return nil, err
 				}
 				k = 0
@@ -134,24 +222,55 @@ func (c *Channel) readMeasure(file *os.File, version uint16, isDataList bool) ([
 			//Next Data
 			offset = dtl.DataSectionLength(k)
 			target += offset
-			readAddr = c.signalValueAddress(dtl.Link.Data[k])
+
+			readAddr = c.datablockAddress(dtl.Link.Data[k])
+
+			if _, err = c.mf4.File.Seek(readAddr, io.SeekStart); err != nil {
+				return nil, err
+			}
+			length, err := blocks.GetLength(c.mf4.File, readAddr)
+			if err != nil {
+				return nil, err
+			}
+			if length != dataBlockSize {
+				buffer = make([]byte, length)
+				dataBlockSize = length
+			}
+
+			_, err = io.ReadFull(c.mf4.File, buffer)
+			if err != nil {
+				return nil, err
+			}
+			pos = int64(c.block.Data.ByteOffset)
 			k += 1
 		}
+		// Safely slice the buffer
+		data := buffer[pos : pos+int64(size)]
 
-		seekRead(file, readAddr, data)
-		buf := bytes.NewBuffer(data)
-		value, err := parseSignalMeasure(buf, byteOrder, dataType)
+		value, err := parseSignalMeasure2(data, byteOrder, dataType)
 		if err != nil {
 			return nil, err
 		}
 		measure = append(measure, value)
-		readAddr += rowSize
+
+		pos += rowSize
+
 	}
+
 	return measure, nil
 }
 
+func (c *Channel) readMeasureRow(bufValue []byte) (interface{}, error) {
+	size := c.block.SignalBytesRange()
+	data := make([]byte, size)
+	byteOrder := c.block.ByteOrder()
+	dataType := c.block.LoadDataType(len(data))
+	buf := bytes.NewBuffer(bufValue)
+	return parseSignalMeasure(buf, byteOrder, dataType)
+}
+
 // readMeasureFromSDBlock return extract sample measure from SDBlock or a list of SDBlocks
-func (c *Channel) readMeasureFromSDBlock(file *os.File, isDataList bool) ([]interface{}, error) {
+func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error) {
 	var measure []interface{}
 	var length uint32
 	var dtl *DL.Block
@@ -167,13 +286,13 @@ func (c *Channel) readMeasureFromSDBlock(file *os.File, isDataList bool) ([]inte
 	byteOrder := c.block.ByteOrder()
 
 	if isDataList {
-		dtl, err = DL.New(file, c.mf4.MdfVersion(), address)
+		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), address)
 		if err != nil {
 			return nil, err
 		}
-		sdb = SD.New(file, dtl.Link.Data[0])
+		sdb = SD.New(c.mf4.File, dtl.Link.Data[0])
 	} else {
-		sdb = SD.New(file, address)
+		sdb = SD.New(c.mf4.File, address)
 	}
 
 	size := c.block.SignalBytesRange()
@@ -188,7 +307,7 @@ func (c *Channel) readMeasureFromSDBlock(file *os.File, isDataList bool) ([]inte
 		if target >= next && isDataList {
 			// Next list
 			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
-				dtl, err = DL.New(file, c.mf4.MdfVersion(), dtl.Next())
+				dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), dtl.Next())
 				if err != nil {
 					return nil, err
 				}
@@ -197,7 +316,7 @@ func (c *Channel) readMeasureFromSDBlock(file *os.File, isDataList bool) ([]inte
 			if k+1 > len(dtl.Link.Data) {
 				break
 			}
-			sdb := SD.New(file, dtl.Link.Data[k])
+			sdb := SD.New(c.mf4.File, dtl.Link.Data[k])
 			target = int64(sdb.Header.Length)
 			next = int64(headerLen)
 			k += 1
@@ -207,14 +326,14 @@ func (c *Channel) readMeasureFromSDBlock(file *os.File, isDataList bool) ([]inte
 		}
 
 		// Read the Link section from the binary file
-		if err := binary.Read(file, binary.LittleEndian, &buflenght); err != nil {
+		if err := binary.Read(c.mf4.File, binary.LittleEndian, &buflenght); err != nil {
 			return nil, fmt.Errorf("error reading buflenght section sdblock: %s", err)
 		}
 
 		length = binary.LittleEndian.Uint32(buflenght)
 
 		bufValue := make([]byte, length)
-		if err := binary.Read(file, binary.LittleEndian, &bufValue); err != nil {
+		if err := binary.Read(c.mf4.File, binary.LittleEndian, &bufValue); err != nil {
 			return nil, fmt.Errorf("error reading bufValue section sdblock: %s", err)
 		}
 
@@ -244,7 +363,6 @@ func (c *Channel) extractSample() ([]interface{}, error) {
 // readFixedLenghtSample extracts samples from channel type Fixed Length Signal
 // Data
 func (c Channel) readFixedLenghtSample() ([]interface{}, error) {
-	var sample []interface{}
 	blockHeader, err := blocks.GetHeaderID(c.mf4.File, c.DataGroup.Link.Data)
 	if err != nil {
 		return nil, err
@@ -252,35 +370,44 @@ func (c Channel) readFixedLenghtSample() ([]interface{}, error) {
 
 	switch blockHeader {
 	case blocks.DtID, blocks.DvID:
-		sample, err = c.readSingleDataBlock(c.mf4.File)
+		return c.readSingleDataBlock()
 	case blocks.DlID:
-		sample, err = c.readDataList(c.mf4.File, c.mf4.MdfVersion())
+		return c.readDataList()
 	default:
 		fmt.Println(blockHeader)
 		return nil, fmt.Errorf("package not ready to read this file")
 	}
-	return sample, err
 }
 
 // readVLSDSample extracts samples from channel type Variable Length Signal Data
 // (VLSD)
 func (c *Channel) readVLSDSample() ([]interface{}, error) {
 	var sample []interface{}
+	var blockHeader string
 	var err error
 
-	blockHeader, err := blocks.GetHeaderID(c.mf4.File, c.block.Link.Data)
+	if c.DataGroup.Data.RecIDSize != 0 {
+		blockHeader, err = blocks.GetHeaderID(c.mf4.File, c.DataGroup.Link.Data)
+	} else {
+		blockHeader, err = blocks.GetHeaderID(c.mf4.File, c.block.Link.Data)
+	}
+
 	if err != nil {
 		return nil, err
 	}
 
 	switch blockHeader {
+	case blocks.DtID:
+		return c.readDTBlockUnsorted()
 	case blocks.SdID:
-		return c.readSDBlock(c.mf4.File)
+		return c.readSDBlock()
 	case blocks.DlID:
-		return c.readListOfSDBlock(c.mf4.File)
+		return c.readListOfSDBlock()
 	case blocks.DzID:
 		fmt.Println(blockHeader)
 		return nil, fmt.Errorf("package not ready to read this file")
+	case blocks.CgID:
+		return c.readSingleDataBlockVLSD()
 	default:
 		fmt.Println(blockHeader)
 		return sample, fmt.Errorf("package not ready to read this file")
@@ -291,12 +418,26 @@ func (c *Channel) readVLSDSample() ([]interface{}, error) {
 // Sample returns a array with the measures of the channel applying conversion
 // block on it
 func (c *Channel) Sample() ([]interface{}, error) {
-	sample, err := c.RawSample()
+	var sample []interface{}
+	var err error
+
+	if c.CachedSamples != nil {
+		if !c.isConverted {
+			c.applyConversion(&c.CachedSamples)
+
+		}
+		return c.CachedSamples, nil
+	}
+
+	sample, err = c.extractSample()
 	if err != nil {
 		return nil, err
 	}
 
 	c.applyConversion(&sample)
+	if !c.mf4.ReadOptions.MemoryOptimized {
+		c.CachedSamples = sample
+	}
 	return sample, nil
 }
 
@@ -307,40 +448,55 @@ func (c *Channel) RawSample() ([]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return sample, nil
 }
 
 // readSDBlock returns measure from SDBlock
-func (c *Channel) readSDBlock(file *os.File) ([]interface{}, error) {
-	return c.readMeasureFromSDBlock(file, false)
+func (c *Channel) readSDBlock() ([]interface{}, error) {
+	return c.readMeasureFromSDBlock(false)
+}
+
+func (c *Channel) readDTBlockUnsorted() ([]interface{}, error) {
+	return nil, nil
 }
 
 // readListOfSDBlock returns measures from a DLBlock of SDBlock
-func (c *Channel) readListOfSDBlock(file *os.File) ([]interface{}, error) {
-	return c.readMeasureFromSDBlock(file, true)
+func (c *Channel) readListOfSDBlock() ([]interface{}, error) {
+	return c.readMeasureFromSDBlock(true)
 }
 
 // readSingleDataBlock returns measure from DTBlock
-func (c *Channel) readSingleDataBlock(file *os.File) ([]interface{}, error) {
-	return c.readMeasure(file, 0, false)
+func (c *Channel) readSingleDataBlock() ([]interface{}, error) {
+	return c.readSingleChannel(false)
+}
+
+// readSingleDataBlock returns measure from DTBlock
+func (c *Channel) readSingleDataBlockVLSD() ([]interface{}, error) {
+	return nil, nil
 }
 
 // readDataList returns measure from DLBlock
-func (c *Channel) readDataList(file *os.File, version uint16) ([]interface{}, error) {
-	return c.readMeasure(file, version, true)
+func (c *Channel) readDataList() ([]interface{}, error) {
+	return c.readSingleChannel(true)
 }
 
 // signalValueAddress returns the offset from the signal in the DTBlock
 func (c *Channel) signalValueAddress(dataAddress int64) int64 {
-	return int64(blocks.HeaderSize) + dataAddress + int64(c.DataGroup.GetRecordIDSize()) + int64(c.block.Data.ByteOffset)
+	return int64(blocks.HeaderSize) + dataAddress
+}
+
+// signalValueAddress returns the offset from the signal in the DTBlock
+func (c *Channel) datablockAddress(dataAddress int64) int64 {
+	return dataAddress
 }
 
 func (c *Channel) applyConversion(sample *[]interface{}) {
 	if c.Conversion == nil {
 		return
 	}
+
 	c.Conversion.Apply(sample)
+	c.isConverted = true
 }
 
 func (c *Channel) readInvalidationBit(file *os.File) (bool, error) {
@@ -363,11 +519,26 @@ func (c *Channel) readInvalidationBit(file *os.File) (bool, error) {
 }
 
 func (c *Channel) getInvalidationBitStart() int64 {
-	return int64(c.getRecordID()) + int64(c.getDataBytes())
+	return int64(c.getRecordIDSize()) + int64(c.getDataBytes())
 }
 
-func (c *Channel) getRecordID() uint8 {
-	return c.DataGroup.GetRecordIDSize()
+func (c *Channel) getRecordIDSize() uint8 {
+	return c.DataGroup.RecordIDSize()
+}
+
+func (c *Channel) readRecordID(recordArray []byte) int64 {
+	switch c.getRecordIDSize() {
+	case 1:
+		return int64(recordArray[0])
+	case 2:
+		return int64(binary.LittleEndian.Uint16(recordArray))
+	case 4:
+		return int64(binary.LittleEndian.Uint32(recordArray))
+	case 8:
+		return int64(binary.LittleEndian.Uint64(recordArray))
+	default:
+		return 0
+	}
 }
 
 func (c *Channel) getDataBytes() uint32 {

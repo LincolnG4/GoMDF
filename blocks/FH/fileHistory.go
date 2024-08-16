@@ -1,6 +1,7 @@
 package FH
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -29,57 +30,49 @@ type Data struct {
 	Reserved     [3]byte
 }
 
-func New(file *os.File, startAdress int64) *Block {
-	var blockSize uint64 = blocks.HeaderSize
+func New(file *os.File, startAddress int64) (*Block, error) {
 	var b Block
 
-	_, errs := file.Seek(startAdress, 0)
-	if errs != nil {
-		if errs != io.EOF {
-			fmt.Println(errs, "memory addr out of size")
-		}
+	// Seek to the start address
+	if _, err := file.Seek(startAddress, io.SeekStart); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to seek to address %d: %w", startAddress, err)
 	}
 
-	//Read Header Section
-	b.Header = blocks.Header{}
-
-	//Create a buffer based on blocksize
-	buf := blocks.LoadBuffer(file, blockSize)
-
-	//Read header
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Header)
-	if BinaryError != nil {
-		fmt.Println("error", BinaryError)
-		b.BlankBlock()
+	// Read and decode the header
+	headerBuf := make([]byte, blocks.HeaderSize)
+	if _, err := io.ReadFull(file, headerBuf); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to read header: %w", err)
+	}
+	if err := binary.Read(bytes.NewReader(headerBuf), binary.LittleEndian, &b.Header); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to decode header: %w", err)
 	}
 
+	// Validate block ID
 	if string(b.Header.ID[:]) != blocks.FhID {
-		fmt.Printf("error not %s", blocks.FhID)
+		return b.BlankBlock(), fmt.Errorf("invalid block ID: expected %s, got %s", blocks.FhID, b.Header.ID)
 	}
 
-	//Calculates size of Link Block
-	blockSize = blocks.CalculateLinkSize(b.Header.LinkCount)
-	b.Link = Link{}
-	buf = blocks.LoadBuffer(file, blockSize)
-
-	//Create a buffer based on blocksize
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Link)
-	if BinaryError != nil {
-		fmt.Println("error", BinaryError)
+	// Read and decode the link block
+	linkSize := blocks.CalculateLinkSize(b.Header.LinkCount)
+	linkBuf := make([]byte, linkSize)
+	if _, err := io.ReadFull(file, linkBuf); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to read link block: %w", err)
+	}
+	if err := binary.Read(bytes.NewReader(linkBuf), binary.LittleEndian, &b.Link); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to decode link block: %w", err)
 	}
 
-	//Calculates size of Data Block
-	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
-	b.Data = Data{}
-	buf = blocks.LoadBuffer(file, blockSize)
-
-	//Create a buffer based on blocksize
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
-	if BinaryError != nil {
-		fmt.Println("error", BinaryError)
+	// Read and decode the data block
+	dataSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	dataBuf := make([]byte, dataSize)
+	if _, err := io.ReadFull(file, dataBuf); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to read data block: %w", err)
+	}
+	if err := binary.Read(bytes.NewReader(dataBuf), binary.LittleEndian, &b.Data); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to decode data block: %w", err)
 	}
 
-	return &b
+	return &b, nil
 }
 
 func (b *Block) BlankBlock() *Block {

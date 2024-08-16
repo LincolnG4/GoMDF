@@ -91,7 +91,7 @@ func compareSlices(s1, s2 interface{}) (bool, string) {
 func TestReadFile(t *testing.T) {
 	testcase := loadSimpleTestCase()
 
-	_, err := mf4.ReadFile(testcase.file)
+	_, err := mf4.ReadFile(testcase.file, &mf4.ReadOptions{})
 	if err != nil {
 		t.Fatalf(`could not read file: %v`, err)
 	}
@@ -100,7 +100,7 @@ func TestReadFile(t *testing.T) {
 func TestReadBasicInformations(t *testing.T) {
 	testcase := loadSimpleTestCase()
 
-	m, _ := mf4.ReadFile(testcase.file)
+	m, _ := mf4.ReadFile(testcase.file, &mf4.ReadOptions{})
 	value := m.MdfVersion()
 	if value != testcase.Version {
 		t.Fatalf(`wrong version: expected %d, found %d`, testcase.Version, value)
@@ -111,7 +111,7 @@ func TestReadBasicInformations(t *testing.T) {
 func TestReadChannels(t *testing.T) {
 	testcase := loadSimpleTestCase()
 
-	m, _ := mf4.ReadFile(testcase.file)
+	m, _ := mf4.ReadFile(testcase.file, &mf4.ReadOptions{})
 
 	for _, expected := range m.ListAllChannelsNames() {
 		if !slices.Contains(testcase.Channel, expected) {
@@ -123,7 +123,7 @@ func TestReadChannels(t *testing.T) {
 func TestReadSampleSimpleDTblockINT(t *testing.T) {
 	testcase := loadSimpleTestCase()
 
-	m, _ := mf4.ReadFile(testcase.file)
+	m, _ := mf4.ReadFile(testcase.file, &mf4.ReadOptions{})
 
 	result, err := m.GetChannelSample(0, "channel_b")
 	if err != nil {
@@ -144,9 +144,13 @@ func TestReadSampleSimpleDTblockINT(t *testing.T) {
 func TestReadAttachment(t *testing.T) {
 	testcase := loadAttachmentAndConnverstionTestCase()
 
-	m, _ := mf4.ReadFile(testcase.file)
+	m, _ := mf4.ReadFile(testcase.file, &mf4.ReadOptions{})
 
-	att := m.GetAttachments()
+	att, err := m.GetAttachments()
+	if err != nil {
+		t.Errorf("error read attachments,  error: %s", err)
+
+	}
 	if len(att) != testcase.NumberOfAttachment {
 		t.Errorf("Wrong attachment size,  Expected: %d, Got: %d", testcase.NumberOfAttachment, len(att))
 	}
@@ -159,7 +163,7 @@ func TestReadAttachment(t *testing.T) {
 func TestNestedConversion(t *testing.T) {
 	testcase := loadAttachmentAndConnverstionTestCase()
 
-	m, _ := mf4.ReadFile(testcase.file)
+	m, _ := mf4.ReadFile(testcase.file, &mf4.ReadOptions{})
 
 	result, err := m.GetChannelSample(0, "VehSpd_Cval_CPC")
 	if err != nil {
@@ -174,8 +178,4 @@ func TestNestedConversion(t *testing.T) {
 	if ok, err := compareSlices(testcase.Sample, result); !ok {
 		t.Error(err)
 	}
-}
-
-func TestEvents(t *testing.T) {
-
 }

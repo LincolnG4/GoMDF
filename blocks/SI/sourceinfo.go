@@ -1,8 +1,10 @@
 package SI
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/LincolnG4/GoMDF/blocks"
@@ -46,40 +48,50 @@ type SourceInfo struct {
 	Flag    string
 }
 
-func New(file *os.File, version uint16, startAdress int64) *Block {
+func New(file *os.File, version uint16, startAddress int64) (*Block, error) {
 	var b Block
-	var err error
 
+	// Seek to the start address
+	if _, err := file.Seek(startAddress, io.SeekStart); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to seek to address %d: %w", startAddress, err)
+	}
+
+	// Read and decode the header
 	b.Header = blocks.Header{}
-
-	b.Header, err = blocks.GetHeader(file, startAdress, blocks.SiID)
-	if err != nil {
-		return b.BlankBlock()
+	headerBuf := make([]byte, blocks.HeaderSize)
+	if _, err := io.ReadFull(file, headerBuf); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to read header: %w", err)
+	}
+	if err := binary.Read(bytes.NewReader(headerBuf), binary.LittleEndian, &b.Header); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to decode header: %w", err)
 	}
 
-	//Calculates size of Link Block
-	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	b.Link = Link{}
-	buf := blocks.LoadBuffer(file, blockSize)
-
-	//Create a buffer based on blocksize
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+	// Validate the block ID
+	if string(b.Header.ID[:]) != blocks.SiID {
+		return b.BlankBlock(), fmt.Errorf("invalid block ID: expected %s, got %s", blocks.SiID, b.Header.ID)
 	}
 
-	//Calculates size of Data Block
-	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
-	b.Data = Data{}
-	buf = blocks.LoadBuffer(file, blockSize)
-
-	//Create a buffer based on blocksize
-	BinaryError = binary.Read(buf, binary.LittleEndian, &b.Data)
-	if BinaryError != nil {
-		fmt.Println("ERROR", BinaryError)
+	// Read and decode the link block
+	linkSize := blocks.CalculateLinkSize(b.Header.LinkCount)
+	linkBuf := make([]byte, linkSize)
+	if _, err := io.ReadFull(file, linkBuf); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to read link block: %w", err)
+	}
+	if err := binary.Read(bytes.NewReader(linkBuf), binary.LittleEndian, &b.Link); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to decode link block: %w", err)
 	}
 
-	return &b
+	// Read and decode the data block
+	dataSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	dataBuf := make([]byte, dataSize)
+	if _, err := io.ReadFull(file, dataBuf); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to read data block: %w", err)
+	}
+	if err := binary.Read(bytes.NewReader(dataBuf), binary.LittleEndian, &b.Data); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to decode data block: %w", err)
+	}
+
+	return &b, nil
 }
 
 // GetPath returns human readable string containing additional
@@ -124,7 +136,17 @@ func (b *Block) Comment(file *os.File) string {
 }
 
 func Get(file *os.File, version uint16, address int64) SourceInfo {
-	b := New(file, version, address)
+	b, err := New(file, version, address)
+	if err != nil {
+		return SourceInfo{
+			Name:    "",
+			Path:    "",
+			Comment: "",
+			Type:    "",
+			BusType: "",
+			Flag:    "",
+		}
+	}
 	return SourceInfo{
 		Name:    b.Name(file),
 		Path:    b.Path(file),

@@ -1,8 +1,10 @@
 package CN
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 
@@ -89,36 +91,38 @@ const (
 	VirtualData
 )
 
-func New(file *os.File, version uint16, startAdress int64) *Block {
+func New(file *os.File, version uint16, startAddress int64) (*Block, error) {
 	var b Block
 	var err error
 
+	// Initialize the header
 	b.Header = blocks.Header{}
 
-	b.Header, err = blocks.GetHeader(file, startAdress, blocks.CnID)
+	// Read the header directly
+	b.Header, err = blocks.GetHeader(file, startAddress, blocks.CnID)
 	if err != nil {
-		return b.BlankBlock()
+		return b.BlankBlock(), err
 	}
 
-	//Calculates size of Link Block
-	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	buffEach := make([]byte, blockSize)
-	// Read the Link section from the binary file
-	if err := binary.Read(file, binary.LittleEndian, &buffEach); err != nil {
-		fmt.Println("error reading link section chblock:", err)
+	// Calculate the size of the Link Block and read the binary data directly into the buffer
+	linkBlockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
+	linkBuffer := make([]byte, linkBlockSize)
+	if _, err := io.ReadFull(file, linkBuffer); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading link section chblock: %s", err)
 	}
 
-	// Populate the Link fields dynamically based on version
-	linkFields := []int64{}
-	for i := 0; i < len(buffEach)/8; i++ {
-		linkFields = append(linkFields, int64(binary.LittleEndian.Uint64(buffEach[i*8:(i+1)*8])))
+	// Parse Link fields from the buffer
+	linkFields := make([]int64, linkBlockSize/8)
+	for i := 0; i < len(linkFields); i++ {
+		linkFields[i] = int64(binary.LittleEndian.Uint64(linkBuffer[i*8 : (i+1)*8]))
 	}
 
-	// Handle version-specific fields in Link based on the version
+	// Handle version-specific Link fields
 	if version >= 420 {
 		linkFields = append(linkFields, blocks.ReadInt64FromBinary(file))
 	}
 
+	// Populate Link struct fields
 	b.Link = Link{
 		Next:         linkFields[0],
 		Composition:  linkFields[1],
@@ -129,44 +133,50 @@ func New(file *os.File, version uint16, startAdress int64) *Block {
 		MdUnit:       linkFields[6],
 		MdComment:    linkFields[7],
 	}
-	//Calculates size of Data Block
-	blockSize = blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
-	buf := blocks.LoadBuffer(file, blockSize)
 
-	// Create a buffer based on block size
-	if err := binary.Read(buf, binary.LittleEndian, &b.Data); err != nil {
-		fmt.Println("error reading data chblock:", err)
+	// Calculate the size of the Data Block and read directly
+	dataBlockSize := blocks.CalculateDataSize(b.Header.Length, b.Header.LinkCount)
+	dataBuffer := make([]byte, dataBlockSize)
+	if _, err := io.ReadFull(file, dataBuffer); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading data chblock: %s", err)
 	}
 
-	if version < 410 {
-		return &b
+	// Populate the Data struct from the binary data
+	if err := binary.Read(bytes.NewReader(dataBuffer), binary.LittleEndian, &b.Data); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error parsing data block: %s", err)
 	}
 
-	//Handling versions >= 4.10
-	for i := 0; i < int(b.Data.AttachmentCount); i++ {
-		b.Link.AtReference = linkFields[8]
+	// Handle version-specific fields if version >= 4.10
+	if version >= 410 {
+		for i := 0; i < int(b.Data.AttachmentCount); i++ {
+			b.Link.AtReference = linkFields[8]
+		}
+
+		if b.Data.Flags == 12 {
+			b.Link.DefaultX = [3]int64{linkFields[9], linkFields[10], linkFields[11]}
+		}
 	}
 
-	if b.Data.Flags == 12 {
-		b.Link.DefaultX = [3]int64{linkFields[9], linkFields[10], linkFields[11]}
-	}
-	return &b
+	return &b, nil
 }
 
 // Conversion return Conversion structs that hold the formula to convert
 // raw sample to desired value.
-func (b *Block) Conversion(file *os.File, channelDataType uint8) CC.Conversion {
-	cc := b.NewConversion(file)
+func (b *Block) Conversion(file *os.File, channelDataType uint8) (CC.Conversion, error) {
+	cc, err := b.NewConversion(file)
+	if err != nil {
+		return nil, err
+	}
 	if cc == nil {
-		return nil
+		return nil, nil
 	}
 	return cc.Get(file, channelDataType)
 }
 
 // NewConversion create a new CCBlock according to the Link.CcConvertion field.
-func (b *Block) NewConversion(file *os.File) *CC.Block {
+func (b *Block) NewConversion(file *os.File) (*CC.Block, error) {
 	if b.Link.CcConvertion == 0 {
-		return nil
+		return nil, nil
 	}
 	return CC.New(file, b.Link.CcConvertion)
 }
@@ -236,7 +246,7 @@ func (b *Block) ByteOrder() binary.ByteOrder {
 	return binary.BigEndian
 }
 
-// LengthSignalInRow is number of Bytes required to store (cn_bit_count + cn_bit_offset) bits
+// SignalBytesRange is number of Bytes required to store (cn_bit_count + cn_bit_offset) bits
 func (b *Block) SignalBytesRange() uint32 {
 	return (b.Data.BitCount + uint32(b.Data.BitOffset)) / 8
 }

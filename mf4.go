@@ -1,6 +1,7 @@
 package mf4
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +11,7 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/AT"
 	"github.com/LincolnG4/GoMDF/blocks/CG"
 	"github.com/LincolnG4/GoMDF/blocks/CN"
-	"github.com/LincolnG4/GoMDF/blocks/DG"
+	"github.com/LincolnG4/GoMDF/blocks/DT"
 	"github.com/LincolnG4/GoMDF/blocks/EV"
 	"github.com/LincolnG4/GoMDF/blocks/FH"
 	"github.com/LincolnG4/GoMDF/blocks/HD"
@@ -25,17 +26,58 @@ type MF4 struct {
 	File           *os.File
 	Header         *HD.Block
 	Identification *ID.Block
+
 	//Address to First File History Block
-	FileHistory  int64
+	FileHistory int64
+
+	DataGroups   []*DataGroup
 	ChannelGroup []*ChannelGroup
 	Channels     []*Channel
+
+	//Unsorted
+	UnsortedBlocks []*UnsortedBlock
+
+	ReadOptions *ReadOptions
 }
 
-func ReadFile(file *os.File) (*MF4, error) {
+type ReadOptions struct {
+	// MemoryOptimized indicates whether to store data in memory or use
+	// file-based storage.
+	// Default is false, measures are cached in memory, which can improve
+	// performance by avoiding file I/O operations but may increase memory usage
+	// , particularly with large datasets.
+	//
+	// If true, measures are saved to a file or re-read as needed. This approach
+	// helps manage memory usage more effectively by offloading data to disk,
+	// making it suitable for very large datasets that might exceed available
+	// memory
+	MemoryOptimized bool
+
+	// InitAllChannels indicates whether to read all channels during
+	// initialization.
+	// If true, all predefined channels will be created and ready for use
+	// immediately after initialization. This can be useful when you need all
+	// channels available from the start and want to avoid delays caused by
+	// creating channels later on.
+	//
+	// If false, channels are created on-demand as they are needed. This
+	// approach can be more memory-efficient if you have a large number of
+	// channels or don't need all of them immediately. It also avoids
+	// preallocating resources that might never be used
+	//InitAllChannels bool
+}
+
+type UnsortedBlock struct {
+	dataGroup         *DataGroup
+	channelGroupsByID map[uint64]*ChannelGroup
+}
+
+func ReadFile(file *os.File, readOptions *ReadOptions) (*MF4, error) {
 	var address int64 = 0
 	mf4File := MF4{
 		File:           file,
 		Identification: ID.New(file, address),
+		ReadOptions:    readOptions,
 	}
 	fileVersion := mf4File.MdfVersion()
 	if fileVersion < 400 {
@@ -55,49 +97,69 @@ func (m *MF4) read() {
 	var comment string
 
 	if !m.IsFinalized() {
-		panic("NOT FINALIZED MF4, PACKAGE IS NOT PREPARED")
+		panic("MF4 NOT FINALIZED, PACKAGE IS NOT PREPARED")
 	}
 
 	version := m.MdfVersion()
 	nextDataGroupAddress := m.firstDataGroup()
 	m.Channels = make([]*Channel, 0)
+
 	dgindex := 0
 	for nextDataGroupAddress != 0 {
-		dataGroupBlock := DG.New(file, nextDataGroupAddress)
-		mdCommentAddr := dataGroupBlock.MetadataComment()
-		comment = MD.New(file, mdCommentAddr)
-		nextAddressCG := dataGroupBlock.FirstChannelGroup()
+		var dataGroup DataGroup
+		var UnsortedBlocks UnsortedBlock
+		isUnsorted := false
 
+		dataGroup = NewDataGroup(file, nextDataGroupAddress)
+		m.DataGroups = append(m.DataGroups, &dataGroup)
+
+		comment = MD.New(file, dataGroup.block.MetadataComment())
+
+		nextAddressCG := dataGroup.block.FirstChannelGroup()
 		cgIndex := 0
 		for nextAddressCG != 0 {
 			var masterChannel Channel
 
-			cgBlock := CG.New(file, version, nextAddressCG)
+			cgBlock, err := CG.New(file, version, nextAddressCG)
+			if err != nil {
+				panic(err)
+			}
 
 			channelGroup := &ChannelGroup{
 				Block:      cgBlock,
 				Channels:   make(map[string]*Channel),
-				DataGroup:  dataGroupBlock,
+				DataGroup:  dataGroup.block,
 				SourceInfo: SI.Get(file, version, cgBlock.Link.SiAcqSource),
 				Comment:    comment,
 			}
 
+			dataGroup.ChannelGroup = append(dataGroup.ChannelGroup, channelGroup)
+
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
-				cnBlock := CN.New(file, version, nextAddressCN)
+				cnBlock, err := CN.New(file, version, nextAddressCN)
+				if err != nil {
+					panic(err)
+				}
+
+				cc, err := cnBlock.Conversion(m.File, cnBlock.DataType())
+				if err != nil {
+					panic(err)
+				}
 
 				cn := &Channel{
 					Name:              cnBlock.ChannelName(m.File),
 					ChannelGroup:      cgBlock,
 					ChannelGroupIndex: cgIndex,
-					DataGroup:         dataGroupBlock,
+					DataGroup:         dataGroup.block,
 					DataGroupIndex:    dgindex,
 					Type:              cnBlock.Type(),
 					Master:            &masterChannel,
 					SourceInfo:        SI.Get(file, version, cnBlock.Link.SiSource),
 					Comment:           MD.New(file, cnBlock.CommentMd()),
-					Conversion:        cnBlock.Conversion(m.File, cnBlock.DataType()),
+					Conversion:        cc,
 					block:             cnBlock,
+					isUnsorted:        false,
 					mf4:               m,
 				}
 
@@ -107,6 +169,36 @@ func (m *MF4) read() {
 					cn.Master = nil
 				}
 
+				// Unsorted file
+				if dataGroup.block.Data.RecIDSize != 0 {
+					cn.CachedSamples = make([]interface{}, 0)
+					isUnsorted = true
+					if UnsortedBlocks.dataGroup == nil {
+						UnsortedBlocks = newUnsortedGroup(dataGroup)
+					}
+
+					UnsortedBlocks.channelGroupsByID[cgBlock.Data.RecordId] = channelGroup
+					if cnBlock.Link.Data != 0 {
+						vsldMap := make(map[string]*Channel)
+						vsldMap["vlsd"] = cn
+						cn.isUnsorted = true
+						VLSDBlock, err := CG.New(file, version, cnBlock.Link.Data)
+						if err != nil {
+							panic(err)
+						}
+
+						VLSD := &ChannelGroup{
+							Block:      VLSDBlock,
+							Channels:   vsldMap,
+							DataGroup:  dataGroup.block,
+							SourceInfo: SI.Get(file, version, VLSDBlock.Link.SiAcqSource),
+							Comment:    comment,
+						}
+
+						UnsortedBlocks.channelGroupsByID[VLSDBlock.Data.RecordId] = VLSD
+					}
+				}
+
 				channelGroup.Channels[cn.Name] = cn
 				m.Channels = append(m.Channels, cn)
 				nextAddressCN = cnBlock.Next()
@@ -114,15 +206,86 @@ func (m *MF4) read() {
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
 			nextAddressCG = cgBlock.Next()
 		}
-		nextDataGroupAddress = dataGroupBlock.Next()
+		if isUnsorted {
+			m.UnsortedBlocks = append(m.UnsortedBlocks, &UnsortedBlocks)
+			m.Sort(UnsortedBlocks)
+		}
+
+		nextDataGroupAddress = dataGroup.block.Next()
 		dgindex++
+	}
+}
+
+// Sort is applied for unsorted files.
+func (m *MF4) Sort(us UnsortedBlock) error {
+	dt, err := DT.New(m.File, us.dataGroup.block.Link.Data)
+	if err != nil {
+		return err
+	}
+	currentPos, _ := m.File.Seek(0, io.SeekCurrent)
+
+	var lastPos int64 = currentPos
+	dtsize := dt.Header.Length - 24
+	for uint64(lastPos-currentPos) < dtsize {
+		id, err := us.dataGroup.block.BytesOfRecordIDSize(m.File)
+		if err != nil {
+			panic(err)
+		}
+
+		cg := us.channelGroupsByID[id]
+		if cg.Block.IsVLSD() {
+			var sampleLength uint32
+			if err := binary.Read(m.File, binary.LittleEndian, &sampleLength); err != nil {
+				panic(err)
+			}
+
+			bufValue := make([]byte, sampleLength)
+			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
+				panic(err)
+			}
+
+			cn := cg.Channels["vlsd"]
+			value, err := cn.readMeasureRow(bufValue)
+			if err != nil {
+				panic(err)
+			}
+			cn.CachedSamples = append(cn.CachedSamples, value)
+		} else {
+			size := cg.Block.Data.DataBytes
+			bufValue := make([]byte, size)
+			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
+				panic(err)
+			}
+
+			for _, cn := range cg.Channels {
+				if cn.isUnsorted {
+					continue
+				}
+				offset := cn.block.Data.ByteOffset
+				bsize := offset + cn.block.Data.BitCount/8
+
+				value, err := cn.readMeasureRow(bufValue[offset:bsize])
+				if err != nil {
+					panic(err)
+				}
+				cn.CachedSamples = append(cn.CachedSamples, value)
+			}
+		}
+		lastPos, _ = m.File.Seek(0, io.SeekCurrent)
+	}
+	return nil
+}
+
+func newUnsortedGroup(dataGroup DataGroup) UnsortedBlock {
+	unsortedMap := make(map[uint64]*ChannelGroup, 0)
+	return UnsortedBlock{
+		dataGroup:         &dataGroup,
+		channelGroupsByID: unsortedMap,
 	}
 }
 
 // GetChannelSample loads sample based DataGroupName and ChannelName
 func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interface{}, error) {
-	var err error
-
 	cgrp := m.ChannelGroup[indexDataGroup]
 
 	// Does channel exist in datagroup?
@@ -135,13 +298,7 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 	// 	return nil, fmt.Errorf("channel %s has invalid read", channelName)
 	// }
 
-	sample, err := cn.extractSample()
-	if err != nil {
-		return nil, err
-	}
-
-	cn.applyConversion(&sample)
-	return sample, nil
+	return cn.Sample()
 }
 
 // ListAllChannelsNames returns an slice with all channels from the MF4 file
@@ -159,8 +316,20 @@ func (m *MF4) ListAllChannelsNames() []string {
 }
 
 // ListAllChannels returns an slice with all channels from the MF4 file
-func (m *MF4) ListAllChannelsFromDataGroup(datagroupIndex int) []*Channel {
-	return m.Channels
+func (m *MF4) ListAllChannelsFromDataGroup(datagroupIndex int) ([]*Channel, error) {
+	if len(m.DataGroups) < datagroupIndex {
+		return nil, fmt.Errorf("datagroup %d doesn't exist", datagroupIndex)
+	}
+
+	var cs []*Channel
+	dg := m.DataGroups[datagroupIndex]
+	for _, cg := range dg.ChannelGroup {
+		for _, c := range cg.Channels {
+			cs = append(cs, c)
+		}
+	}
+
+	return cs, nil
 }
 
 // MapAllChannelsNames returns an map with all channels from the MF4 file group
@@ -188,7 +357,7 @@ func (m *MF4) MapAllChannels() map[int]*Channel {
 // The function iterates through the linked list of events, creating EV instances
 // and handling event details such as names, comments, and scopes.
 // If file has no events or errors occur during EV instance creation, it will
-// return `nil`
+// return `nil`.
 func (m *MF4) ListEvents() []*EV.Event {
 	if m.getFirstEvent() == 0 {
 		return nil
@@ -212,7 +381,7 @@ func readArrayBlock(file *os.File, addr int64) {
 }
 
 // GetAttachmemts iterates over all AT blocks and return to an array
-func (m *MF4) GetAttachments() []AT.AttFile {
+func (m *MF4) GetAttachments() ([]AT.AttFile, error) {
 	return AT.Get(m.File, m.getFirstAttachment())
 }
 
@@ -302,18 +471,20 @@ func (m *MF4) GetMeasureComment() string {
 // Parameters:
 //
 //	m: A pointer to the MF4 instance containing the file change log.
-func (m *MF4) ReadChangeLog() {
+func (m *MF4) ReadChangeLog() []string {
+	r := make([]string, 0)
 	nextAddressFH := m.getFileHistory()
 	for nextAddressFH != 0 {
-		fhBlock := FH.New(m.File, nextAddressFH)
+		fhBlock, _ := FH.New(m.File, nextAddressFH)
+
 		c := fhBlock.GetChangeLog(m.File)
 		t := fhBlock.GetTimeNs()
 		f := fhBlock.GetTimeFlag()
 
-		fmt.Println(m.formatLog(t, f, c))
-
+		r = append(r, m.formatLog(t, f, c))
 		nextAddressFH = fhBlock.Next()
 	}
+	return r
 }
 
 // StartTimeNs returns the start timestamp of measurement in nanoseconds
@@ -367,7 +538,11 @@ func (m *MF4) getTimeClass() uint8 {
 }
 
 func (m *MF4) loadHeader() {
-	m.Header = HD.New(m.File, blocks.IdblockSize)
+	var err error
+	m.Header, err = HD.New(m.File, blocks.IdblockSize)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (m *MF4) getHeaderMdComment() int64 {

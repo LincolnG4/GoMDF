@@ -25,18 +25,11 @@ func main() {
 		panic(err)
 	}
 
-	m, err := mf4.ReadFile(file)
+	m, err := mf4.ReadFile(file, &mf4.ReadOptions{})
 	if err != nil {
 		panic(err)
 	}
-	// Access metadata
-	fmt.Println(m.Version())
-	fmt.Println("Version ID --> ", m.MdfVersion())
-	fmt.Println("Start Time NS --> ", m.GetStartTimeNs())
-	fmt.Println("Start StartTimeLT --> ", m.GetStartTimeLT())
-	fmt.Println()
-	fmt.Println("List Names -->", m.ListAllChannelsNames())
-	fmt.Println("Mapped Channels -->", m.MapAllChannels())
+
 
 	fmt.Println()
 	// Get channel samples
@@ -61,8 +54,15 @@ func main() {
 	//m.SaveAttachmentTo(att, "/PATH/TO/BE/SAVE/")
 
 	// Read Change logs
-	m.ReadChangeLog()
-
+	// m.ReadChangeLog()
+	// Access metadata
+	fmt.Println(m.Version())
+	fmt.Println("Version ID --> ", m.MdfVersion())
+	fmt.Println("Start Time NS --> ", m.GetStartTimeNs())
+	fmt.Println("Start StartTimeLT --> ", m.GetStartTimeLT())
+	fmt.Println()
+	fmt.Println("List Names -->", m.ListAllChannelsNames())
+	fmt.Println("Mapped Channels -->", m.MapAllChannels())
 }
 
 ```

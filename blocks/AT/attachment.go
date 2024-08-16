@@ -62,28 +62,40 @@ type AttFile struct {
 	block        *Block
 }
 
-func New(file *os.File, startAdress int64) *Block {
+func New(file *os.File, startAddress int64) (*Block, error) {
 	var b Block
-	var err error
 
+	// Seek to the start address
+	if _, err := file.Seek(startAddress, io.SeekStart); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to seek to address %d: %w", startAddress, err)
+	}
+
+	// Read the header
 	b.Header = blocks.Header{}
-
-	b.Header, err = blocks.GetHeader(file, startAdress, blocks.AtID)
-	if err != nil {
-		return b.BlankBlock()
+	headerBuf := make([]byte, blocks.HeaderSize)
+	if _, err := io.ReadFull(file, headerBuf); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to read header: %w", err)
+	}
+	if err := binary.Read(bytes.NewReader(headerBuf), binary.LittleEndian, &b.Header); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to decode header: %w", err)
 	}
 
-	//Calculates size of Link Block
-	blockSize := blocks.CalculateLinkSize(b.Header.LinkCount)
-	b.Link = Link{}
-	buf := blocks.LoadBuffer(file, blockSize)
-	//Create a buffer based on blocksize
-	BinaryError := binary.Read(buf, binary.LittleEndian, &b.Link)
-	if BinaryError != nil {
-		fmt.Println("error:", BinaryError)
+	// Validate the header ID
+	if string(b.Header.ID[:]) != blocks.AtID {
+		return b.BlankBlock(), fmt.Errorf("invalid block ID: expected %s, got %s", blocks.AtID, b.Header.ID)
 	}
 
-	return &b
+	// Read the link block
+	linkSize := blocks.CalculateLinkSize(b.Header.LinkCount)
+	linkBuf := make([]byte, linkSize)
+	if _, err := io.ReadFull(file, linkBuf); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to read link block: %w", err)
+	}
+	if err := binary.Read(bytes.NewReader(linkBuf), binary.LittleEndian, &b.Link); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to decode link block: %w", err)
+	}
+
+	return &b, nil
 }
 
 func (b *Block) LoadAttachmentFile(file *os.File) *AttFile {
@@ -239,12 +251,16 @@ func (b *Block) loadData(file *os.File, adress int64) (*Data, error) {
 	return &d, nil
 }
 
-func Get(f *os.File, a int64) []AttFile {
+func Get(f *os.File, a int64) ([]AttFile, error) {
 	var fileName, comm string
 	i := 0
 	arr := make([]AttFile, 0)
 	for a != 0 {
-		atBlock := New(f, a)
+		atBlock, err := New(f, a)
+		if err != nil {
+			return arr, nil
+		}
+
 		if atBlock.GetTxFilename() != 0 {
 			fileName = atBlock.GetFileName(f, atBlock.GetTxFilename())
 		} else {
@@ -268,7 +284,7 @@ func Get(f *os.File, a int64) []AttFile {
 		})
 		a = atBlock.Next()
 	}
-	return arr
+	return arr, nil
 }
 
 func (b *Block) GetTxFilename() int64 {

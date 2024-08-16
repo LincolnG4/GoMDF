@@ -75,48 +75,35 @@ func (b *Block) getLinkCount() uint64 {
 
 // Creates a new Block struct and initializes it by reading data from
 // the provided file.
-func New(file *os.File, version uint16, startAdress int64) (*Block, error) {
+func New(file *os.File, version uint16, startAddress int64) (*Block, error) {
 	var b Block
-
 	blockID := blocks.EvID
-	b.Header = blocks.Header{}
-	_, err := file.Seek(startAdress, 0)
-	if err != nil {
-		if err != io.EOF {
-			return b.BlankBlock(), fmt.Errorf("failed to seek to memory address: %v", err)
-		}
+
+	// Seek to the start address
+	if _, err := file.Seek(startAddress, io.SeekStart); err != nil {
+		return b.BlankBlock(), fmt.Errorf("failed to seek to memory address %d: %w", startAddress, err)
 	}
 
-	// Read the header block.
-	err = b.readHeader(file)
-	if err != nil {
-		return b.BlankBlock(), fmt.Errorf("error reading header: %v", err)
+	// Read and decode the header
+	if err := b.readHeader(file); err != nil {
+		return b.BlankBlock(), fmt.Errorf("error reading header: %w", err)
 	}
 
-	// Check if it is a valid block ID.
-	id := b.getID()
-	if string(id[:]) != blockID {
+	// Validate block ID
+	if id := b.getID(); string(id[:]) != blockID {
 		return b.BlankBlock(), fmt.Errorf("invalid block ID: expected %s, got %s", blockID, id)
 	}
 
-	// Read the link block.
+	// Read the link block
 	linkBytes, err := b.readLink(file)
 	if err != nil {
-		return b.BlankBlock(), fmt.Errorf("error reading link section: %v", err)
+		return b.BlankBlock(), fmt.Errorf("error reading link section: %w", err)
 	}
 
-	// Read the data block.
-	err = b.readData(file)
-	if err != nil {
-		return b.BlankBlock(), fmt.Errorf("error reading data section: %v", err)
-	}
+	// Process the link block
+	linkFields := extractLinkFields(linkBytes)
 
-	// Extract data from the link block.
-	linkFields := []int64{}
-	for i := 0; i < len(linkBytes)/blocks.Byte; i++ {
-		linkFields = append(linkFields, int64(binary.LittleEndian.Uint64(linkBytes[i*blocks.Byte:(i+1)*blocks.Byte])))
-	}
-
+	// Assign extracted data to Link
 	b.Link = Link{
 		Next:      linkFields[0],
 		Parent:    linkFields[1],
@@ -124,21 +111,35 @@ func New(file *os.File, version uint16, startAdress int64) (*Block, error) {
 		TxName:    linkFields[3],
 		MdComment: linkFields[4],
 	}
-	if b.Data.ScopeCount != 0 {
-		endIdx := 5 + b.Data.ScopeCount
-		b.Link.Scope = linkFields[5:endIdx]
+
+	// Handle Scope and Attachment references
+	if b.Data.ScopeCount > 0 {
+		b.Link.Scope = linkFields[5 : 5+b.Data.ScopeCount]
 	}
-	if b.Data.AttachmentCount != 0 {
-		startIdx := 5 + b.Data.ScopeCount
-		endIdx := 5 + int(b.Data.ScopeCount) + int(b.Data.AttachmentCount)
-		b.Link.ATReference = linkFields[startIdx:endIdx]
+	if b.Data.AttachmentCount > 0 {
+		b.Link.ATReference = linkFields[5+b.Data.ScopeCount : 5+b.Data.ScopeCount+uint32(b.Data.AttachmentCount)]
 	}
+
+	// Handle version-specific fields
 	if b.Data.Flags == 1 && version >= blocks.Version420 {
-		linkFields = append(linkFields, blocks.ReadInt64FromBinary(file))
-		b.Link.TxGroupName = linkFields[len(linkFields)-1]
+		if extraField := blocks.ReadInt64FromBinary(file); err == nil {
+			b.Link.TxGroupName = extraField
+		} else {
+			return b.BlankBlock(), fmt.Errorf("error reading TxGroupName: %w", err)
+		}
 	}
 
 	return &b, nil
+}
+
+// Helper function to extract link fields from the byte slice
+func extractLinkFields(linkBytes []byte) []int64 {
+	numFields := len(linkBytes) / blocks.Byte
+	linkFields := make([]int64, numFields)
+	for i := 0; i < numFields; i++ {
+		linkFields[i] = int64(binary.LittleEndian.Uint64(linkBytes[i*blocks.Byte : (i+1)*blocks.Byte]))
+	}
+	return linkFields
 }
 
 func (b *Block) readHeader(file *os.File) error {
