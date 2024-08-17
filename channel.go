@@ -183,7 +183,7 @@ func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
 	rowSize := int64(c.ChannelGroup.Data.DataBytes)
 	dataType := c.block.LoadDataType(int(size))
 
-	readAddr = c.datablockAddress(c.DataGroup.Link.Data)
+	readAddr = c.DataGroup.Link.Data
 	length, err := blocks.GetLength(c.mf4.File, readAddr)
 	if err != nil {
 		return nil, err
@@ -214,7 +214,6 @@ func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
 			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
 				dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), dtl.Next())
 				if err != nil {
-
 					return nil, err
 				}
 				k = 0
@@ -271,8 +270,6 @@ func (c *Channel) readMeasureRow(bufValue []byte) (interface{}, error) {
 
 // readMeasureFromSDBlock return extract sample measure from SDBlock or a list of SDBlocks
 func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error) {
-	var measure []interface{}
-	var length uint32
 	var dtl *DL.Block
 	var err error
 	var sdb *SD.Block
@@ -284,6 +281,15 @@ func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error)
 
 	// byte slice order convert
 	byteOrder := c.block.ByteOrder()
+	size := c.block.SignalBytesRange()
+	data := make([]byte, size)
+	dataType := c.block.LoadDataType(len(data))
+
+	length, err := blocks.GetLength(c.mf4.File, address)
+	if err != nil {
+		return nil, err
+	}
+	buffer := make([]byte, length)
 
 	if isDataList {
 		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), address)
@@ -293,16 +299,18 @@ func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error)
 		sdb = SD.New(c.mf4.File, dtl.Link.Data[0])
 	} else {
 		sdb = SD.New(c.mf4.File, address)
+		_, err = io.ReadFull(c.mf4.File, buffer)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	size := c.block.SignalBytesRange()
-	data := make([]byte, size)
-	dataType := c.block.LoadDataType(len(data))
-
-	buflenght := make([]byte, 4)
+	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
 
 	target := int64(sdb.Header.Length)
 	k := 0
+	var pos int64 = 0
+
 	for {
 		if target >= next && isDataList {
 			// Next list
@@ -313,39 +321,43 @@ func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error)
 				}
 				k = 0
 			}
+			pos = 0
 			if k+1 > len(dtl.Link.Data) {
 				break
 			}
 			sdb := SD.New(c.mf4.File, dtl.Link.Data[k])
+
+			if _, err = c.mf4.File.Seek(dtl.Link.Data[k], io.SeekStart); err != nil {
+				return nil, err
+			}
+
+			length, err = blocks.GetLength(c.mf4.File, dtl.Link.Data[k])
+			if err != nil {
+				return nil, err
+			}
+
+			_, err = io.ReadFull(c.mf4.File, buffer)
+			if err != nil {
+				return nil, err
+			}
 			target = int64(sdb.Header.Length)
-			next = int64(headerLen)
+			next = 0
 			k += 1
 		}
 		if !isDataList && next >= target {
 			break
 		}
 
-		// Read the Link section from the binary file
-		if err := binary.Read(c.mf4.File, binary.LittleEndian, &buflenght); err != nil {
-			return nil, fmt.Errorf("error reading buflenght section sdblock: %s", err)
-		}
+		length2 := binary.LittleEndian.Uint32(buffer[pos : pos+4])
+		pos += 4
 
-		length = binary.LittleEndian.Uint32(buflenght)
-
-		bufValue := make([]byte, length)
-		if err := binary.Read(c.mf4.File, binary.LittleEndian, &bufValue); err != nil {
-			return nil, fmt.Errorf("error reading bufValue section sdblock: %s", err)
-		}
-
-		buf := bytes.NewBuffer(bufValue)
-		value, err := parseSignalMeasure(buf, byteOrder, dataType)
+		value, err := parseSignalMeasure2(buffer[pos:pos+int64(length2)], byteOrder, dataType)
 		if err != nil {
 			return nil, err
 		}
-
 		measure = append(measure, value)
 
-		next += int64(len(buflenght)) + int64(length)
+		next += pos + int64(length2)
 	}
 
 	return measure, nil
@@ -358,25 +370,6 @@ func (c *Channel) extractSample() ([]interface{}, error) {
 		return c.readVLSDSample()
 	}
 	return c.readFixedLenghtSample()
-}
-
-// readFixedLenghtSample extracts samples from channel type Fixed Length Signal
-// Data
-func (c Channel) readFixedLenghtSample() ([]interface{}, error) {
-	blockHeader, err := blocks.GetHeaderID(c.mf4.File, c.DataGroup.Link.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	switch blockHeader {
-	case blocks.DtID, blocks.DvID:
-		return c.readSingleDataBlock()
-	case blocks.DlID:
-		return c.readDataList()
-	default:
-		fmt.Println(blockHeader)
-		return nil, fmt.Errorf("package not ready to read this file")
-	}
 }
 
 // readVLSDSample extracts samples from channel type Variable Length Signal Data
@@ -398,7 +391,8 @@ func (c *Channel) readVLSDSample() ([]interface{}, error) {
 
 	switch blockHeader {
 	case blocks.DtID:
-		return c.readDTBlockUnsorted()
+		fmt.Println(blockHeader)
+		return nil, nil
 	case blocks.SdID:
 		return c.readSDBlock()
 	case blocks.DlID:
@@ -415,6 +409,25 @@ func (c *Channel) readVLSDSample() ([]interface{}, error) {
 
 }
 
+// readFixedLenghtSample extracts samples from channel type Fixed Length Signal
+// Data
+func (c Channel) readFixedLenghtSample() ([]interface{}, error) {
+	blockHeader, err := blocks.GetHeaderID(c.mf4.File, c.DataGroup.Link.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	switch blockHeader {
+	case blocks.DtID, blocks.DvID:
+		return c.readSingleDataBlock()
+	case blocks.DlID:
+		return c.readDataList()
+	default:
+		fmt.Println(blockHeader)
+		return nil, fmt.Errorf("package not ready to read this file")
+	}
+}
+
 // Sample returns a array with the measures of the channel applying conversion
 // block on it
 func (c *Channel) Sample() ([]interface{}, error) {
@@ -424,7 +437,6 @@ func (c *Channel) Sample() ([]interface{}, error) {
 	if c.CachedSamples != nil {
 		if !c.isConverted {
 			c.applyConversion(&c.CachedSamples)
-
 		}
 		return c.CachedSamples, nil
 	}
@@ -454,10 +466,6 @@ func (c *Channel) RawSample() ([]interface{}, error) {
 // readSDBlock returns measure from SDBlock
 func (c *Channel) readSDBlock() ([]interface{}, error) {
 	return c.readMeasureFromSDBlock(false)
-}
-
-func (c *Channel) readDTBlockUnsorted() ([]interface{}, error) {
-	return nil, nil
 }
 
 // readListOfSDBlock returns measures from a DLBlock of SDBlock
