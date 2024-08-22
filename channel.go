@@ -91,8 +91,22 @@ type Channel struct {
 	block *CN.Block
 }
 
+type ChannelReader struct {
+	// Byte order conversion (LittleEndian/BigEndian)
+	ByteOrder binary.ByteOrder
+
+	// Number of bits per row
+	SizeMeasureRow uint32
+
+	DataType interface{}
+
+	DataAddress int64
+
+	MeasureBuffer []byte
+}
+
 // parseSignalMeasure decode signal sample based on data type
-func parseSignalMeasure(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
+func parseSignalMeasure2(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
 	switch dataType.(type) {
 	case string:
 		return buf.String(), nil
@@ -112,131 +126,87 @@ func parseSignalMeasure(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType 
 	}
 }
 
-func parseSignalMeasure2(data []byte, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
-	switch v := dataType.(type) {
-	case string:
-		return string(data), nil
-	case []uint8:
-		return hex.EncodeToString(data), nil
-	case int8:
-		return int8(data[0]), nil
-	case uint8:
-		return data[0], nil
-	case int16:
-		if len(data) < 2 {
-			return nil, fmt.Errorf("not enough data to read int16")
-		}
-		return int16(byteOrder.Uint16(data)), nil
-	case uint16:
-		if len(data) < 2 {
-			return nil, fmt.Errorf("not enough data to read uint16")
-		}
-		return byteOrder.Uint16(data), nil
-	case int32:
-		if len(data) < 4 {
-			return nil, fmt.Errorf("not enough data to read int32")
-		}
-		return int32(byteOrder.Uint32(data)), nil
-	case uint32:
-		if len(data) < 4 {
-			return nil, fmt.Errorf("not enough data to read uint32")
-		}
-		return byteOrder.Uint32(data), nil
-	case int64:
-		if len(data) < 8 {
-			return nil, fmt.Errorf("not enough data to read int64")
-		}
-		return int64(byteOrder.Uint64(data)), nil
-	case uint64:
-		if len(data) < 8 {
-			return nil, fmt.Errorf("not enough data to read uint64")
-		}
-		return byteOrder.Uint64(data), nil
-	case float32:
-		if len(data) < 4 {
-			return nil, fmt.Errorf("not enough data to read float32")
-		}
-		return math.Float32frombits(byteOrder.Uint32(data)), nil
-	case float64:
-		if len(data) < 8 {
-			return nil, fmt.Errorf("not enough data to read float64")
-		}
-		return math.Float64frombits(byteOrder.Uint64(data)), nil
-	default:
-		return nil, fmt.Errorf("unsupported data type: %T", v)
+func (c *Channel) loadVariablesReadChannel(addr int64) (ChannelReader, error) {
+	size := c.block.SignalBytesRange()
+	length, err := blocks.GetLength(c.mf4.File, addr)
+	if err != nil {
+		return ChannelReader{}, err
 	}
+
+	return ChannelReader{
+		ByteOrder:      c.block.ByteOrder(),
+		SizeMeasureRow: size,
+		DataType:       c.block.LoadDataType(int(size)),
+		DataAddress:    addr,
+		MeasureBuffer:  make([]byte, length),
+	}, nil
 }
 
 // readMeasure return extract sample measure from DTBlock//DLBlock with fixed
 // lenght
 func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
-	var dtl *DL.Block
-	var err error
-	var readAddr int64
-	var dataBlockSize uint64
+	var (
+		dtl                                   *DL.Block
+		err                                   error
+		dataBlockSize, length, offset, target uint64
+	)
 
-	// Byte slice order conversion
-	byteOrder := c.block.ByteOrder()
-
-	// Get configuration
-	size := c.block.SignalBytesRange()
-	rowSize := int64(c.ChannelGroup.Data.DataBytes)
-	dataType := c.block.LoadDataType(int(size))
-
-	readAddr = c.DataGroup.Link.Data
-	length, err := blocks.GetLength(c.mf4.File, readAddr)
+	cnReader, err := c.loadVariablesReadChannel(c.DataGroup.Link.Data)
 	if err != nil {
 		return nil, err
 	}
-	buffer := make([]byte, length)
 
-	// Create a large buffer to read the entire data at once
 	if isDataList {
-		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), c.DataGroup.Link.Data)
+		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), cnReader.DataAddress)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		_, err = io.ReadFull(c.mf4.File, buffer)
-		if err != nil {
-			return nil, err
-		}
+		cnReader.DataAddress = dtl.Link.Data[0]
 	}
 
-	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
+	if _, err = c.mf4.File.Seek(cnReader.DataAddress+int64(blocks.HeaderSize), io.SeekStart); err != nil {
+		return nil, err
+	}
 
-	var offset, target uint64
+	_, err = io.ReadFull(c.mf4.File, cnReader.MeasureBuffer)
+	if err != nil {
+		return nil, err
+	}
+
 	k := 0
 	pos := int64(c.block.Data.ByteOffset)
+	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
+	rowSize := int64(c.ChannelGroup.Data.DataBytes)
 	for i := uint64(0); i < c.ChannelGroup.Data.CycleCount; i++ {
 		if i == target && isDataList {
 			// Next list
 			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
-				dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), dtl.Next())
+				dtl, err := DL.New(c.mf4.File, c.mf4.MdfVersion(), cnReader.DataAddress)
 				if err != nil {
 					return nil, err
 				}
+				cnReader.DataAddress = dtl.Link.Data[k]
 				k = 0
 			}
 			//Next Data
 			offset = dtl.DataSectionLength(k)
 			target += offset
 
-			readAddr = c.datablockAddress(dtl.Link.Data[k])
-
-			if _, err = c.mf4.File.Seek(readAddr, io.SeekStart); err != nil {
+			if _, err = c.mf4.File.Seek(cnReader.DataAddress, io.SeekStart); err != nil {
 				return nil, err
 			}
-			length, err := blocks.GetLength(c.mf4.File, readAddr)
+
+			length, err = blocks.GetLength(c.mf4.File, cnReader.DataAddress)
 			if err != nil {
 				return nil, err
 			}
 			if length != dataBlockSize {
-				buffer = make([]byte, length)
+				fmt.Println(length)
+				cnReader.MeasureBuffer = make([]byte, length)
 				dataBlockSize = length
 			}
 
-			_, err = io.ReadFull(c.mf4.File, buffer)
+			_, err = io.ReadFull(c.mf4.File, cnReader.MeasureBuffer)
 			if err != nil {
 				return nil, err
 			}
@@ -244,9 +214,9 @@ func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
 			k += 1
 		}
 		// Safely slice the buffer
-		data := buffer[pos : pos+int64(size)]
+		data := cnReader.MeasureBuffer[pos : pos+int64(cnReader.SizeMeasureRow)]
 
-		value, err := parseSignalMeasure2(data, byteOrder, dataType)
+		value, err := parseSignalMeasure(data, cnReader.ByteOrder, cnReader.DataType)
 		if err != nil {
 			return nil, err
 		}
@@ -259,59 +229,41 @@ func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
 	return measure, nil
 }
 
-func (c *Channel) readMeasureRow(bufValue []byte) (interface{}, error) {
-	size := c.block.SignalBytesRange()
-	data := make([]byte, size)
-	byteOrder := c.block.ByteOrder()
-	dataType := c.block.LoadDataType(len(data))
-	buf := bytes.NewBuffer(bufValue)
-	return parseSignalMeasure(buf, byteOrder, dataType)
-}
-
 // readMeasureFromSDBlock return extract sample measure from SDBlock or a list of SDBlocks
 func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error) {
 	var dtl *DL.Block
 	var err error
 	var sdb *SD.Block
 
-	address := c.block.Link.Data
-
-	headerLen := blocks.HeaderSize
-	next := int64(headerLen)
-
 	// byte slice order convert
-	byteOrder := c.block.ByteOrder()
-	size := c.block.SignalBytesRange()
-	data := make([]byte, size)
-	dataType := c.block.LoadDataType(len(data))
-
-	length, err := blocks.GetLength(c.mf4.File, address)
+	cnReader, err := c.loadVariablesReadChannel(c.block.Link.Data)
 	if err != nil {
 		return nil, err
 	}
-	buffer := make([]byte, length)
 
 	if isDataList {
-		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), address)
+		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), cnReader.DataAddress)
 		if err != nil {
 			return nil, err
 		}
-		sdb = SD.New(c.mf4.File, dtl.Link.Data[0])
-	} else {
-		sdb = SD.New(c.mf4.File, address)
-		_, err = io.ReadFull(c.mf4.File, buffer)
-		if err != nil {
-			return nil, err
-		}
+		cnReader.DataAddress = dtl.Link.Data[0]
+	}
+
+	sdb = SD.New(c.mf4.File, cnReader.DataAddress)
+	_, err = io.ReadFull(c.mf4.File, cnReader.MeasureBuffer)
+	if err != nil {
+		return nil, err
 	}
 
 	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
 
 	target := int64(sdb.Header.Length)
 	k := 0
+	next := int64(blocks.HeaderSize)
 	var pos int64 = 0
-
-	for {
+	var i uint64 = 0
+	var length uint32
+	for i <= c.ChannelGroup.Data.CycleCount {
 		if target >= next && isDataList {
 			// Next list
 			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
@@ -327,16 +279,10 @@ func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error)
 			}
 			sdb := SD.New(c.mf4.File, dtl.Link.Data[k])
 
-			if _, err = c.mf4.File.Seek(dtl.Link.Data[k], io.SeekStart); err != nil {
+			if _, err = c.mf4.File.Seek(dtl.Link.Data[k]+int64(blocks.HeaderSize), io.SeekStart); err != nil {
 				return nil, err
 			}
-
-			length, err = blocks.GetLength(c.mf4.File, dtl.Link.Data[k])
-			if err != nil {
-				return nil, err
-			}
-
-			_, err = io.ReadFull(c.mf4.File, buffer)
+			_, err = io.ReadFull(c.mf4.File, cnReader.MeasureBuffer)
 			if err != nil {
 				return nil, err
 			}
@@ -348,16 +294,18 @@ func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error)
 			break
 		}
 
-		length2 := binary.LittleEndian.Uint32(buffer[pos : pos+4])
+		length = binary.LittleEndian.Uint32(cnReader.MeasureBuffer[pos : pos+4])
 		pos += 4
 
-		value, err := parseSignalMeasure2(buffer[pos:pos+int64(length2)], byteOrder, dataType)
+		value, err := parseSignalMeasure(cnReader.MeasureBuffer[pos:pos+int64(length)], cnReader.ByteOrder, cnReader.DataType)
 		if err != nil {
 			return nil, err
 		}
+
 		measure = append(measure, value)
 
-		next += pos + int64(length2)
+		next += pos + int64(length)
+		i++
 	}
 
 	return measure, nil
@@ -453,6 +401,61 @@ func (c *Channel) Sample() ([]interface{}, error) {
 	return sample, nil
 }
 
+func parseSignalMeasure(data []byte, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
+	switch v := dataType.(type) {
+	case string:
+		return string(data), nil
+	case []uint8:
+		return hex.EncodeToString(data), nil
+	case int8:
+		return int8(data[0]), nil
+	case uint8:
+		return data[0], nil
+	case int16:
+		if len(data) < 2 {
+			return nil, fmt.Errorf("not enough data to read int16")
+		}
+		return int16(byteOrder.Uint16(data)), nil
+	case uint16:
+		if len(data) < 2 {
+			return nil, fmt.Errorf("not enough data to read uint16")
+		}
+		return byteOrder.Uint16(data), nil
+	case int32:
+		if len(data) < 4 {
+			return nil, fmt.Errorf("not enough data to read int32")
+		}
+		return int32(byteOrder.Uint32(data)), nil
+	case uint32:
+		if len(data) < 4 {
+			return nil, fmt.Errorf("not enough data to read uint32")
+		}
+		return byteOrder.Uint32(data), nil
+	case int64:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("not enough data to read int64")
+		}
+		return int64(byteOrder.Uint64(data)), nil
+	case uint64:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("not enough data to read uint64")
+		}
+		return byteOrder.Uint64(data), nil
+	case float32:
+		if len(data) < 4 {
+			return nil, fmt.Errorf("not enough data to read float32")
+		}
+		return math.Float32frombits(byteOrder.Uint32(data)), nil
+	case float64:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("not enough data to read float64")
+		}
+		return math.Float64frombits(byteOrder.Uint64(data)), nil
+	default:
+		return nil, fmt.Errorf("unsupported data type: %T", v)
+	}
+}
+
 // RawSample returns a array with the measures of the channel not applying
 // conversion block on it
 func (c *Channel) RawSample() ([]interface{}, error) {
@@ -461,6 +464,22 @@ func (c *Channel) RawSample() ([]interface{}, error) {
 		return nil, err
 	}
 	return sample, nil
+}
+func (c *Channel) readMeasureRow(bufValue []byte) (interface{}, error) {
+	size := c.block.SignalBytesRange()
+	data := make([]byte, size)
+	byteOrder := c.block.ByteOrder()
+	dataType := c.block.LoadDataType(len(data))
+	buf := bytes.NewBuffer(bufValue)
+	return parseSignalMeasure2(buf, byteOrder, dataType)
+}
+
+func (c *Channel) loadDataBlockAddressDataList(cnReader *ChannelReader, i int) (int64, error) {
+	dtl, err := DL.New(c.mf4.File, c.mf4.MdfVersion(), cnReader.DataAddress)
+	if err != nil {
+		return -1, err
+	}
+	return dtl.Link.Data[i], nil
 }
 
 // readSDBlock returns measure from SDBlock
