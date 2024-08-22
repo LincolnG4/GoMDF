@@ -11,6 +11,7 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/AT"
 	"github.com/LincolnG4/GoMDF/blocks/CG"
 	"github.com/LincolnG4/GoMDF/blocks/CN"
+	"github.com/LincolnG4/GoMDF/blocks/DL"
 	"github.com/LincolnG4/GoMDF/blocks/EV"
 	"github.com/LincolnG4/GoMDF/blocks/FH"
 	"github.com/LincolnG4/GoMDF/blocks/HD"
@@ -217,8 +218,33 @@ func (m *MF4) read() {
 
 // Sort is applied for unsorted files.
 func (m *MF4) Sort(us UnsortedBlock) error {
+	headerID, err := blocks.GetHeaderID(m.File, us.dataGroup.block.Link.Data)
+	if err != nil {
+		return err
+	}
 
-	dtsize, err := blocks.GetLength(m.File, us.dataGroup.block.Link.Data)
+	var (
+		addr             int64 = us.dataGroup.block.Link.Data
+		dtl              *DL.Block
+		offsetDT, target uint64
+	)
+
+	isDataList := false
+	k := 0
+	if headerID == blocks.DlID {
+		dtl, err = DL.New(m.File, m.MdfVersion(), addr)
+		if err != nil {
+			return err
+		}
+
+		addr = dtl.Link.Data[k]
+		offsetDT = dtl.DataSectionLength(k)
+		target = offsetDT
+		isDataList = true
+		k++
+	}
+
+	dtsize, err := blocks.GetLength(m.File, addr)
 	if err != nil {
 		return err
 	}
@@ -234,14 +260,53 @@ func (m *MF4) Sort(us UnsortedBlock) error {
 		byteSize            int
 		rowSize             int
 		bsize, size, offset uint32
+		i, dataBlockSize    uint64
 	)
 
 	for uint64(pos) < dtsize {
+		if i == target && isDataList {
+			// Next list
+			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
+				dtl, err := DL.New(m.File, m.MdfVersion(), addr)
+				if err != nil {
+					return err
+				}
+				addr = dtl.Link.Data[k]
+				k = 0
+			}
+
+			//Next Data
+			offsetDT = dtl.DataSectionLength(k)
+			target += offsetDT
+
+			if _, err = m.File.Seek(addr, io.SeekStart); err != nil {
+				return err
+			}
+
+			dtsize, err = blocks.GetLength(m.File, addr)
+			if err != nil {
+				return err
+			}
+
+			if dtsize != dataBlockSize {
+				buf = make([]byte, dtsize)
+				dataBlockSize = dtsize
+			}
+
+			_, err = io.ReadFull(m.File, buf)
+			if err != nil {
+				return err
+			}
+			pos = 0
+			k += 1
+		}
+
 		byteSize = int(us.dataGroup.block.RecordIDSize())
 		id, err := bytesOfRecordIDSize(byteSize, buf[pos:pos+byteSize])
 		if err != nil {
 			panic(err)
 		}
+
 		pos += byteSize
 
 		cg, ok := us.channelGroupsByID[id]

@@ -162,6 +162,8 @@ func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
 			return nil, err
 		}
 		cnReader.DataAddress = dtl.Link.Data[0]
+		offset = dtl.DataSectionLength(0)
+		target = offset
 	}
 
 	if _, err = c.mf4.File.Seek(cnReader.DataAddress+int64(blocks.HeaderSize), io.SeekStart); err != nil {
@@ -201,7 +203,6 @@ func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
 				return nil, err
 			}
 			if length != dataBlockSize {
-				fmt.Println(length)
 				cnReader.MeasureBuffer = make([]byte, length)
 				dataBlockSize = length
 			}
@@ -464,14 +465,6 @@ func (c *Channel) RawSample() ([]interface{}, error) {
 		return nil, err
 	}
 	return sample, nil
-}
-func (c *Channel) readMeasureRow(bufValue []byte) (interface{}, error) {
-	size := c.block.SignalBytesRange()
-	data := make([]byte, size)
-	byteOrder := c.block.ByteOrder()
-	dataType := c.block.LoadDataType(len(data))
-	buf := bytes.NewBuffer(bufValue)
-	return parseSignalMeasure2(buf, byteOrder, dataType)
 }
 
 func (c *Channel) loadDataBlockAddressDataList(cnReader *ChannelReader, i int) (int64, error) {
