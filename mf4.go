@@ -11,7 +11,7 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/AT"
 	"github.com/LincolnG4/GoMDF/blocks/CG"
 	"github.com/LincolnG4/GoMDF/blocks/CN"
-	"github.com/LincolnG4/GoMDF/blocks/DT"
+	"github.com/LincolnG4/GoMDF/blocks/DL"
 	"github.com/LincolnG4/GoMDF/blocks/EV"
 	"github.com/LincolnG4/GoMDF/blocks/FH"
 	"github.com/LincolnG4/GoMDF/blocks/HD"
@@ -218,60 +218,137 @@ func (m *MF4) read() {
 
 // Sort is applied for unsorted files.
 func (m *MF4) Sort(us UnsortedBlock) error {
-	dt, err := DT.New(m.File, us.dataGroup.block.Link.Data)
+	headerID, err := blocks.GetHeaderID(m.File, us.dataGroup.block.Link.Data)
 	if err != nil {
 		return err
 	}
-	currentPos, _ := m.File.Seek(0, io.SeekCurrent)
 
-	var lastPos int64 = currentPos
-	dtsize := dt.Header.Length - 24
-	for uint64(lastPos-currentPos) < dtsize {
-		id, err := us.dataGroup.block.BytesOfRecordIDSize(m.File)
+	var (
+		addr             int64 = us.dataGroup.block.Link.Data
+		dtl              *DL.Block
+		offsetDT, target uint64
+	)
+
+	isDataList := false
+	k := 0
+	if headerID == blocks.DlID {
+		dtl, err = DL.New(m.File, m.MdfVersion(), addr)
+		if err != nil {
+			return err
+		}
+
+		addr = dtl.Link.Data[k]
+		offsetDT = dtl.DataSectionLength(k)
+		target = offsetDT
+		isDataList = true
+		k++
+	}
+
+	dtsize, err := blocks.GetLength(m.File, addr)
+	if err != nil {
+		return err
+	}
+
+	pos := 0
+	buf := make([]byte, dtsize)
+	_, err = io.ReadFull(m.File, buf)
+	if err != nil {
+		return err
+	}
+
+	var (
+		byteSize            int
+		rowSize             int
+		bsize, size, offset uint32
+		i, dataBlockSize    uint64
+	)
+
+	for uint64(pos) < dtsize {
+		if i == target && isDataList {
+			// Next list
+			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
+				dtl, err := DL.New(m.File, m.MdfVersion(), addr)
+				if err != nil {
+					return err
+				}
+				addr = dtl.Link.Data[k]
+				k = 0
+			}
+
+			//Next Data
+			offsetDT = dtl.DataSectionLength(k)
+			target += offsetDT
+
+			if _, err = m.File.Seek(addr, io.SeekStart); err != nil {
+				return err
+			}
+
+			dtsize, err = blocks.GetLength(m.File, addr)
+			if err != nil {
+				return err
+			}
+
+			if dtsize != dataBlockSize {
+				buf = make([]byte, dtsize)
+				dataBlockSize = dtsize
+			}
+
+			_, err = io.ReadFull(m.File, buf)
+			if err != nil {
+				return err
+			}
+			pos = 0
+			k += 1
+		}
+
+		byteSize = int(us.dataGroup.block.RecordIDSize())
+		id, err := bytesOfRecordIDSize(byteSize, buf[pos:pos+byteSize])
 		if err != nil {
 			panic(err)
 		}
 
-		cg := us.channelGroupsByID[id]
+		pos += byteSize
+
+		cg, ok := us.channelGroupsByID[id]
+		if !ok {
+			panic(fmt.Sprintf("id %d not found", id))
+		}
+
 		if cg.Block.IsVLSD() {
 			var sampleLength uint32
-			if err := binary.Read(m.File, binary.LittleEndian, &sampleLength); err != nil {
-				panic(err)
-			}
 
-			bufValue := make([]byte, sampleLength)
-			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
-				panic(err)
-			}
+			sampleLength = binary.LittleEndian.Uint32(buf[pos : pos+4])
+			pos += 4
 
 			cn := cg.Channels["vlsd"]
-			value, err := cn.readMeasureRow(bufValue)
+			size = cn.block.SignalBytesRange()
+			value, err := parseSignalMeasure(buf[pos:pos+int(sampleLength)], cn.block.ByteOrder(), cn.block.LoadDataType(int(size)))
 			if err != nil {
-				panic(err)
+				return err
 			}
+			pos += int(sampleLength)
+
 			cn.CachedSamples = append(cn.CachedSamples, value)
 		} else {
-			size := cg.Block.Data.DataBytes
-			bufValue := make([]byte, size)
-			if err := binary.Read(m.File, binary.LittleEndian, &bufValue); err != nil {
-				panic(err)
-			}
+			rowSize = int(cg.Block.Data.DataBytes)
 
 			for _, cn := range cg.Channels {
 				if cn.isUnsorted {
 					continue
 				}
-				offset := cn.block.Data.ByteOffset
-				bsize := offset + cn.block.Data.BitCount/8
 
-				value, err := cn.readMeasureRow(bufValue[offset:bsize])
+				offset = cn.block.Data.ByteOffset
+				bsize = offset + cn.block.Data.BitCount/8
+				size = cn.block.SignalBytesRange()
+
+				value, err := parseSignalMeasure(buf[pos+int(offset):pos+int(bsize)], cn.block.ByteOrder(), cn.block.LoadDataType(int(size)))
 				if err != nil {
 					panic(err)
 				}
 				cn.CachedSamples = append(cn.CachedSamples, value)
 			}
+			pos += rowSize
 		}
-		lastPos, _ = m.File.Seek(0, io.SeekCurrent)
 	}
 	return nil
 }
@@ -438,6 +515,25 @@ func (m *MF4) StartAngleRad() (float64, error) {
 		return 0, fmt.Errorf("start angle rad is not valid for this file")
 	}
 	return m.getStartAngleRad(), nil
+}
+
+// BytesOfRecordIDSize returns number of Bytes used for record IDs in the data
+// block.
+func bytesOfRecordIDSize(size int, buf []byte) (uint64, error) {
+	switch size {
+	case 0:
+		return 0, nil // Sorted record
+	case 1:
+		return uint64(buf[0]), nil
+	case 2:
+		return uint64(binary.LittleEndian.Uint16(buf[:2])), nil
+	case 4:
+		return uint64(binary.LittleEndian.Uint32(buf[:4])), nil
+	case 8:
+		return binary.LittleEndian.Uint64(buf[:8]), nil
+	default:
+		return 0, fmt.Errorf("invalid number of bytes for record IDs: %d", size)
+	}
 }
 
 // Start distance in meters in meters at the beginning of the measurement serves
