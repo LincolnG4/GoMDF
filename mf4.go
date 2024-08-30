@@ -151,7 +151,7 @@ func (m *MF4) read() {
 					Name:              cnBlock.ChannelName(m.File),
 					ChannelGroup:      cgBlock,
 					ChannelGroupIndex: cgIndex,
-					DataGroup:         dataGroup.block,
+					DataGroup:         &dataGroup,
 					DataGroupIndex:    dgindex,
 					Type:              cnBlock.Type(),
 					Master:            &masterChannel,
@@ -206,6 +206,7 @@ func (m *MF4) read() {
 			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
 			nextAddressCG = cgBlock.Next()
 		}
+
 		if isUnsorted {
 			m.UnsortedBlocks = append(m.UnsortedBlocks, &UnsortedBlocks)
 			m.Sort(UnsortedBlocks)
@@ -465,6 +466,11 @@ func (m *MF4) GetAttachments() ([]AT.AttFile, error) {
 // Saves attachment file input to output path
 func (m *MF4) SaveAttachmentTo(attachment AT.AttFile, outputPath string) AT.AttFile {
 	return attachment.Save(m.File, outputPath)
+}
+
+// GetAttachmemts iterates over all AT blocks and return to an array
+func (m *MF4) IsMemoryOptimized() bool {
+	return m.ReadOptions.MemoryOptimized
 }
 
 // Version method returns the MDF file version
