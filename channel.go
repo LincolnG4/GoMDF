@@ -1,14 +1,12 @@
 package mf4
 
 import (
-	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"math"
 	"os"
-	"reflect"
 
 	"github.com/LincolnG4/GoMDF/blocks"
 	"github.com/LincolnG4/GoMDF/blocks/CC"
@@ -16,22 +14,10 @@ import (
 	"github.com/LincolnG4/GoMDF/blocks/CN"
 	"github.com/LincolnG4/GoMDF/blocks/DG"
 	"github.com/LincolnG4/GoMDF/blocks/DL"
-	"github.com/LincolnG4/GoMDF/blocks/SD"
+	"github.com/LincolnG4/GoMDF/blocks/DZ"
+	"github.com/LincolnG4/GoMDF/blocks/HL"
 	"github.com/LincolnG4/GoMDF/blocks/SI"
 )
-
-type DataGroup struct {
-	block        *DG.Block
-	ChannelGroup []*ChannelGroup
-}
-
-func NewDataGroup(f *os.File, address int64) DataGroup {
-	dataGroupBlock := DG.New(f, address)
-	return DataGroup{
-		block:        dataGroupBlock,
-		ChannelGroup: []*ChannelGroup{},
-	}
-}
 
 type ChannelGroup struct {
 	Block       *CG.Block
@@ -43,337 +29,318 @@ type ChannelGroup struct {
 }
 
 type Channel struct {
-	// channel's name
+	//channel's name
 	Name string
 
-	// conversion formula to convert the raw values to physical values with a
-	// physical unit
+	//conversion formula to convert the raw values to physical values with a
+	//physical unit
 	Conversion CC.Conversion
 
-	// channel type
+	//channel type
 	Type string
 
-	// pointer to the master channel of the channel group.
-	// A 'nil' value indicates that this channel itself is the master.
+	//pointer to the master channel of the channel group.
+	//A 'nil' value indicates that this channel itself is the master.
 	Master *Channel
 
-	// pointer to data group
-	DataGroup *DG.Block
+	//pointer to data group
+	DataGroup *DataGroup
 
-	// data group's index
+	//data group's index
 	DataGroupIndex int
 
-	// pointer to channel group
+	//pointer to channel group
 	ChannelGroup *CG.Block
 
-	// channel group's index
+	//channel group's index
 	ChannelGroupIndex int
 
-	// unsorted channels mapped
+	//unsorted channels mapped
 	isUnsorted bool
 
-	// describes the source of an acquisition mode or of a signal
+	//describes the source of an acquisition mode or of a signal
 	SourceInfo SI.SourceInfo
 
-	// additional information about the channel. Can be 'nil'
+	//additional information about the channel. Can be 'nil'
 	Comment string
 
-	// Samples are cached in memory if file was set with MemoryOptimized is true
+	//Samples are cached in memory if file was set with MemoryOptimized is true
 	CachedSamples []interface{}
 
-	// Conversion applied
+	//Conversion applied
 	isConverted bool
 
-	// pointer to mf4 file
+	//pointer to mf4 file
 	mf4 *MF4
 
-	// pointer to the CNBLOCK
+	//pointer to the CNBLOCK
 	block *CN.Block
+
+	channelReader *ChannelReader
+
+	startAddress int64
 }
 
 type ChannelReader struct {
-	// Byte order conversion (LittleEndian/BigEndian)
+	//Byte order conversion (LittleEndian/BigEndian)
 	ByteOrder binary.ByteOrder
 
-	// Number of bits per row
-	SizeMeasureRow uint32
+	//Number of bits per row
+	SizeMeasureRow int64
 
 	DataType interface{}
 
 	DataAddress int64
 
 	MeasureBuffer []byte
+
+	//Length of the row in block
+	RowSize int64
+
+	//Offset in the row
+	StartOffset int64
 }
 
-// parseSignalMeasure decode signal sample based on data type
-func parseSignalMeasure2(buf *bytes.Buffer, byteOrder binary.ByteOrder, dataType interface{}) (interface{}, error) {
-	switch dataType.(type) {
-	case string:
-		return buf.String(), nil
-	case []uint8:
-		byteArray := make([]byte, buf.Len())
-		_, err := io.ReadFull(buf, byteArray) // Read all bytes into the array
-		if err != nil {
-			return nil, err
-		}
-		return hex.EncodeToString(byteArray), nil
-	default:
-		value := reflect.New(reflect.TypeOf(dataType)).Interface()
-		if err := binary.Read(buf, byteOrder, value); err != nil {
-			return nil, err
-		}
-		return reflect.ValueOf(value).Elem().Interface(), nil
-	}
-}
-
-func (c *Channel) loadVariablesReadChannel(addr int64) (ChannelReader, error) {
-	size := c.block.SignalBytesRange()
-	length, err := blocks.GetLength(c.mf4.File, addr)
+func (cn *ChannelReader) loadBuffer(f *os.File) error {
+	length, err := blocks.GetLength(f, cn.DataAddress)
 	if err != nil {
-		return ChannelReader{}, err
+		return err
 	}
 
-	return ChannelReader{
+	if length != uint64(len(cn.MeasureBuffer)) {
+		cn.MeasureBuffer = make([]byte, length)
+	}
+
+	return nil
+}
+
+func (cn *ChannelReader) readBlockToMemory(f *os.File) error {
+	err := cn.loadBuffer(f)
+	if err != nil {
+		return err
+	}
+
+	if _, err = f.Seek(cn.DataAddress+int64(blocks.HeaderSize), io.SeekStart); err != nil {
+		return err
+	}
+
+	_, err = io.ReadFull(f, cn.MeasureBuffer)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cn *ChannelReader) readDT(pos int64) (interface{}, error) {
+	return parseSignalMeasure(cn.MeasureBuffer[pos:pos+int64(cn.SizeMeasureRow)], cn.ByteOrder, cn.DataType)
+}
+
+func (c *Channel) loadChannelReader(addr int64) *ChannelReader {
+	size := c.block.SignalBytesRange()
+
+	return &ChannelReader{
 		ByteOrder:      c.block.ByteOrder(),
-		SizeMeasureRow: size,
+		SizeMeasureRow: int64(size),
 		DataType:       c.block.LoadDataType(int(size)),
 		DataAddress:    addr,
-		MeasureBuffer:  make([]byte, length),
-	}, nil
+		StartOffset:    int64(c.block.Data.ByteOffset),
+		RowSize:        int64(c.ChannelGroup.Data.DataBytes),
+		MeasureBuffer:  c.DataGroup.CachedDataGroup,
+	}
+}
+
+func (c *Channel) readDataList(measure *[]interface{}) error {
+	dtl, err := DL.New(c.mf4.File, c.mf4.MdfVersion(), c.channelReader.DataAddress)
+	if err != nil {
+		return err
+	}
+
+	id, err := blocks.GetHeaderID(c.mf4.File, dtl.Link.Data[0])
+	if err != nil {
+		return err
+	}
+
+	target := len(dtl.Link.Data)
+	i := 0
+	for i < target {
+		//fmt.Println("next", i, measure)
+		c.channelReader = c.newChannelReader(dtl.Link.Data[i])
+		if err != nil {
+			return err
+		}
+
+		err = c.extractSample(id, measure)
+		if err != nil {
+			return err
+		}
+		i++
+
+		if i == target && dtl.Next() != 0 {
+			dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), dtl.Next())
+			if err != nil {
+				return err
+			}
+			target = len(dtl.Link.Data)
+			i = 0
+		}
+	}
+
+	return nil
+}
+
+func (c *Channel) newChannelReader(addr int64) *ChannelReader {
+	return c.loadChannelReader(addr)
 }
 
 // readMeasure return extract sample measure from DTBlock//DLBlock with fixed
 // lenght
-func (c *Channel) readSingleChannel(isDataList bool) ([]interface{}, error) {
-	var (
-		dtl                                   *DL.Block
-		err                                   error
-		dataBlockSize, length, offset, target uint64
-	)
+func (c *Channel) readDT(measure *[]interface{}) error {
+	var err error
 
-	cnReader, err := c.loadVariablesReadChannel(c.DataGroup.Link.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	if isDataList {
-		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), cnReader.DataAddress)
+	if c.DataGroup.CachedDataGroup == nil {
+		err = c.channelReader.readBlockToMemory(c.mf4.File)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		cnReader.DataAddress = dtl.Link.Data[0]
-		offset = dtl.DataSectionLength(0)
-		target = offset
 	}
 
-	if _, err = c.mf4.File.Seek(cnReader.DataAddress+int64(blocks.HeaderSize), io.SeekStart); err != nil {
-		return nil, err
-	}
-
-	_, err = io.ReadFull(c.mf4.File, cnReader.MeasureBuffer)
-	if err != nil {
-		return nil, err
-	}
-
-	k := 0
-	pos := int64(c.block.Data.ByteOffset)
-	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
-	rowSize := int64(c.ChannelGroup.Data.DataBytes)
+	pos := c.channelReader.StartOffset
 	for i := uint64(0); i < c.ChannelGroup.Data.CycleCount; i++ {
-		if i == target && isDataList {
-			// Next list
-			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
-				dtl, err := DL.New(c.mf4.File, c.mf4.MdfVersion(), cnReader.DataAddress)
-				if err != nil {
-					return nil, err
-				}
-				cnReader.DataAddress = dtl.Link.Data[k]
-				k = 0
-			}
-			//Next Data
-			offset = dtl.DataSectionLength(k)
-			target += offset
-
-			if _, err = c.mf4.File.Seek(cnReader.DataAddress, io.SeekStart); err != nil {
-				return nil, err
-			}
-
-			length, err = blocks.GetLength(c.mf4.File, cnReader.DataAddress)
-			if err != nil {
-				return nil, err
-			}
-			if length != dataBlockSize {
-				cnReader.MeasureBuffer = make([]byte, length)
-				dataBlockSize = length
-			}
-
-			_, err = io.ReadFull(c.mf4.File, cnReader.MeasureBuffer)
-			if err != nil {
-				return nil, err
-			}
-			pos = int64(c.block.Data.ByteOffset)
-			k += 1
+		if pos >= int64(len(c.channelReader.MeasureBuffer)) {
+			return nil
 		}
-		// Safely slice the buffer
-		data := cnReader.MeasureBuffer[pos : pos+int64(cnReader.SizeMeasureRow)]
 
-		value, err := parseSignalMeasure(data, cnReader.ByteOrder, cnReader.DataType)
+		value, err := c.channelReader.readDT(pos)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		measure = append(measure, value)
 
-		pos += rowSize
-
+		*measure = append(*measure, value)
+		pos += c.channelReader.RowSize
 	}
 
-	return measure, nil
+	return nil
 }
 
 // readMeasureFromSDBlock return extract sample measure from SDBlock or a list of SDBlocks
-func (c *Channel) readMeasureFromSDBlock(isDataList bool) ([]interface{}, error) {
-	var dtl *DL.Block
+func (c *Channel) readSdBlock(measure *[]interface{}) error {
 	var err error
-	var sdb *SD.Block
 
-	// byte slice order convert
-	cnReader, err := c.loadVariablesReadChannel(c.block.Link.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	if isDataList {
-		dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), cnReader.DataAddress)
+	if c.DataGroup.CachedDataGroup == nil {
+		err = c.channelReader.readBlockToMemory(c.mf4.File)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		cnReader.DataAddress = dtl.Link.Data[0]
 	}
 
-	sdb = SD.New(c.mf4.File, cnReader.DataAddress)
-	_, err = io.ReadFull(c.mf4.File, cnReader.MeasureBuffer)
+	var (
+		pos    int64 = 0
+		length uint32
+		value  interface{}
+	)
+
+	length = binary.LittleEndian.Uint32(c.channelReader.MeasureBuffer[pos : pos+4])
+	pos += 4
+
+	value, err = parseSignalMeasure(c.channelReader.MeasureBuffer[pos:pos+int64(length)], c.channelReader.ByteOrder, c.channelReader.DataType)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
+	*measure = append(*measure, value)
 
-	target := int64(sdb.Header.Length)
-	k := 0
-	next := int64(blocks.HeaderSize)
-	var pos int64 = 0
-	var i uint64 = 0
-	var length uint32
-	for i <= c.ChannelGroup.Data.CycleCount {
-		if target >= next && isDataList {
-			// Next list
-			if k == len(dtl.Link.Data) && dtl.Next() != 0 {
-				dtl, err = DL.New(c.mf4.File, c.mf4.MdfVersion(), dtl.Next())
-				if err != nil {
-					return nil, err
-				}
-				k = 0
-			}
-			pos = 0
-			if k+1 > len(dtl.Link.Data) {
-				break
-			}
-			sdb := SD.New(c.mf4.File, dtl.Link.Data[k])
-
-			if _, err = c.mf4.File.Seek(dtl.Link.Data[k]+int64(blocks.HeaderSize), io.SeekStart); err != nil {
-				return nil, err
-			}
-			_, err = io.ReadFull(c.mf4.File, cnReader.MeasureBuffer)
-			if err != nil {
-				return nil, err
-			}
-			target = int64(sdb.Header.Length)
-			next = 0
-			k += 1
-		}
-		if !isDataList && next >= target {
-			break
-		}
-
-		length = binary.LittleEndian.Uint32(cnReader.MeasureBuffer[pos : pos+4])
-		pos += 4
-
-		value, err := parseSignalMeasure(cnReader.MeasureBuffer[pos:pos+int64(length)], cnReader.ByteOrder, cnReader.DataType)
-		if err != nil {
-			return nil, err
-		}
-
-		measure = append(measure, value)
-
-		next += pos + int64(length)
-		i++
-	}
-
-	return measure, nil
+	return nil
 }
 
 // extractSample returns a array with sample extracted from datablock based on
 // header id
-func (c *Channel) extractSample() ([]interface{}, error) {
+func (c *Channel) extractSample(id string, measure *[]interface{}) error {
 	if c.block.IsVLSD() {
-		return c.readVLSDSample()
+		return c.readVLSDSample(id, measure)
 	}
-	return c.readFixedLenghtSample()
+	return c.readFixedLenghtSample(id, measure)
+}
+
+func (c *Channel) readDataZipped(measure *[]interface{}) error {
+	var (
+		dz  *DZ.Block
+		err error
+	)
+
+	dz, err = DZ.New(c.mf4.File, c.channelReader.DataAddress)
+	if err != nil {
+		return err
+	}
+
+	c.DataGroup.CachedDataGroup, err = dz.Read()
+	if err != nil {
+		return err
+	}
+
+	c.channelReader.MeasureBuffer = c.DataGroup.CachedDataGroup
+
+	return c.extractSample(dz.BlockTypeModified(), measure)
+}
+
+func (c *Channel) readHeaderList(measure *[]interface{}) error {
+	var (
+		hl  *HL.Block
+		err error
+	)
+
+	hl, err = HL.New(c.mf4.File, c.channelReader.DataAddress)
+	if err != nil {
+		return err
+	}
+
+	id := blocks.DlID
+	c.channelReader = c.newChannelReader(hl.Link.DlFirst)
+	if err != nil {
+		return err
+	}
+
+	return c.extractSample(id, measure)
 }
 
 // readVLSDSample extracts samples from channel type Variable Length Signal Data
 // (VLSD)
-func (c *Channel) readVLSDSample() ([]interface{}, error) {
-	var sample []interface{}
-	var blockHeader string
-	var err error
-
-	if c.DataGroup.Data.RecIDSize != 0 {
-		blockHeader, err = blocks.GetHeaderID(c.mf4.File, c.DataGroup.Link.Data)
-	} else {
-		blockHeader, err = blocks.GetHeaderID(c.mf4.File, c.block.Link.Data)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	switch blockHeader {
+func (c *Channel) readVLSDSample(id string, measure *[]interface{}) error {
+	switch id {
 	case blocks.DtID:
-		fmt.Println(blockHeader)
-		return nil, nil
+		fmt.Println(id)
+		return nil
 	case blocks.SdID:
-		return c.readSDBlock()
+		return c.readSdBlock(measure)
 	case blocks.DlID:
-		return c.readListOfSDBlock()
+		return c.readDataList(measure)
 	case blocks.DzID:
-		fmt.Println(blockHeader)
-		return nil, fmt.Errorf("package not ready to read this file")
+		fmt.Println(id)
+		return fmt.Errorf("package not ready to read this file")
 	case blocks.CgID:
 		return c.readSingleDataBlockVLSD()
 	default:
-		fmt.Println(blockHeader)
-		return sample, fmt.Errorf("package not ready to read this file")
+		fmt.Println(id)
+		return fmt.Errorf("package not ready to read this file")
 	}
 
 }
 
 // readFixedLenghtSample extracts samples from channel type Fixed Length Signal
 // Data
-func (c Channel) readFixedLenghtSample() ([]interface{}, error) {
-	blockHeader, err := blocks.GetHeaderID(c.mf4.File, c.DataGroup.Link.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	switch blockHeader {
+func (c Channel) readFixedLenghtSample(blockID string, measure *[]interface{}) error {
+	switch blockID {
 	case blocks.DtID, blocks.DvID:
-		return c.readSingleDataBlock()
+		return c.readDT(measure)
 	case blocks.DlID:
-		return c.readDataList()
+		return c.readDataList(measure)
+	case blocks.DzID:
+		return c.readDataZipped(measure)
+	case blocks.HlID:
+		return c.readHeaderList(measure)
 	default:
-		fmt.Println(blockHeader)
-		return nil, fmt.Errorf("package not ready to read this file")
+		fmt.Println(blockID)
+		return fmt.Errorf("package not ready to read this file")
 	}
 }
 
@@ -390,13 +357,13 @@ func (c *Channel) Sample() ([]interface{}, error) {
 		return c.CachedSamples, nil
 	}
 
-	sample, err = c.extractSample()
+	sample, err = c.RawSample()
 	if err != nil {
 		return nil, err
 	}
 
 	c.applyConversion(&sample)
-	if !c.mf4.ReadOptions.MemoryOptimized {
+	if !c.mf4.IsMemoryOptimized() {
 		c.CachedSamples = sample
 	}
 	return sample, nil
@@ -457,14 +424,38 @@ func parseSignalMeasure(data []byte, byteOrder binary.ByteOrder, dataType interf
 	}
 }
 
+func (c *Channel) LoadDataAdress() {
+	if c.block.Link.Data != 0 {
+		c.startAddress = c.block.Link.Data
+	} else {
+		c.startAddress = c.DataGroup.DataAddress()
+	}
+}
+
 // RawSample returns a array with the measures of the channel not applying
 // conversion block on it
 func (c *Channel) RawSample() ([]interface{}, error) {
-	sample, err := c.extractSample()
+	c.LoadDataAdress()
+
+	if c.block.Link.Data != 0 {
+		c.startAddress = c.block.Link.Data
+	} else {
+		c.startAddress = c.DataGroup.DataAddress()
+	}
+
+	id, err := blocks.GetHeaderID(c.mf4.File, c.startAddress)
 	if err != nil {
 		return nil, err
 	}
-	return sample, nil
+
+	c.channelReader = c.newChannelReader(c.startAddress)
+	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
+	err = c.extractSample(id, &measure)
+	if err != nil {
+		return nil, err
+	}
+
+	return measure, err
 }
 
 func (c *Channel) loadDataBlockAddressDataList(cnReader *ChannelReader, i int) (int64, error) {
@@ -475,29 +466,19 @@ func (c *Channel) loadDataBlockAddressDataList(cnReader *ChannelReader, i int) (
 	return dtl.Link.Data[i], nil
 }
 
-// readSDBlock returns measure from SDBlock
-func (c *Channel) readSDBlock() ([]interface{}, error) {
-	return c.readMeasureFromSDBlock(false)
-}
-
-// readListOfSDBlock returns measures from a DLBlock of SDBlock
-func (c *Channel) readListOfSDBlock() ([]interface{}, error) {
-	return c.readMeasureFromSDBlock(true)
-}
+// readSingleDataBlock returns measure from DTBlock
+// func (c *Channel) readSingleDataBlock() ([]interface{}, error) {
+// 	return c.readSingleDT()
+// }
 
 // readSingleDataBlock returns measure from DTBlock
-func (c *Channel) readSingleDataBlock() ([]interface{}, error) {
-	return c.readSingleChannel(false)
-}
-
-// readSingleDataBlock returns measure from DTBlock
-func (c *Channel) readSingleDataBlockVLSD() ([]interface{}, error) {
-	return nil, nil
+func (c *Channel) readSingleDataBlockVLSD() error {
+	return nil
 }
 
 // readDataList returns measure from DLBlock
-func (c *Channel) readDataList() ([]interface{}, error) {
-	return c.readSingleChannel(true)
+func (c *Channel) readDL(addr int64) ([]interface{}, error) {
+	return c.readDL(addr)
 }
 
 // signalValueAddress returns the offset from the signal in the DTBlock
@@ -543,7 +524,7 @@ func (c *Channel) getInvalidationBitStart() int64 {
 }
 
 func (c *Channel) getRecordIDSize() uint8 {
-	return c.DataGroup.RecordIDSize()
+	return c.DataGroup.block.RecordIDSize()
 }
 
 func (c *Channel) readRecordID(recordArray []byte) int64 {
