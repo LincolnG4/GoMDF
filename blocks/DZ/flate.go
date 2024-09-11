@@ -24,8 +24,12 @@ type Flate struct {
 }
 
 func (f *Flate) Decompress() ([]byte, error) {
+	return Deflate(*f.Datablock)
+}
+
+func Deflate(data []byte) ([]byte, error) {
 	// Create a zlib reader directly from the file's limited reader
-	zr, err := zlib.NewReader(bytes.NewReader(*f.Datablock))
+	zr, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create zlib reader: %w", err)
 	}

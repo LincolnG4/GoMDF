@@ -18,6 +18,7 @@ type TestCase struct {
 	NumberOfAttachment int
 	AttachmentName     string
 	AttachmentType     string
+	Samples            [][]any
 }
 
 func loadSimpleTestCase() TestCase {
@@ -40,52 +41,6 @@ func loadAttachmentAndConnverstionTestCase() TestCase {
 		AttachmentName:     "user_embedded_display.dspf",
 		AttachmentType:     "application/x-dspf",
 	}
-}
-
-func compareSlices(s1, s2 interface{}) (bool, string) {
-	v1 := reflect.ValueOf(s1)
-	v2 := reflect.ValueOf(s2)
-
-	if v1.Kind() != reflect.Slice || v2.Kind() != reflect.Slice {
-		return false, "result is not slice"
-	}
-
-	for i := 0; i < v1.Len(); i++ {
-		val1 := v1.Index(i).Interface()
-		val2 := v2.Index(i).Interface()
-
-		switch val1 := val1.(type) {
-		case int:
-			switch val2 := val2.(type) {
-			case int:
-				if val1 != val2 {
-					return false, fmt.Sprintf("Expected: %d, Got: %d", val1, val2)
-				}
-			case int64:
-				if int64(val1) != val2 {
-					return false, fmt.Sprintf("Expected: %d, Got: %d", val1, val2)
-				}
-			default:
-				return false, fmt.Sprintf("Expected: %d, Got: %d", val1, val2)
-			}
-		case int64:
-			if val1 != val2.(int64) {
-				return false, fmt.Sprintf("Expected: %d, Got: %d", val1, val2)
-			}
-		case float32:
-			if val1 != val2.(float32) {
-				return false, fmt.Sprintf("Expected: %f, Got: %f", val1, val2)
-			}
-		case float64:
-			if val1 != val2.(float64) {
-				return false, fmt.Sprintf("Expected: %f, Got: %f", val1, val2)
-			}
-		default:
-			return false, fmt.Sprintf("Expected: %f, Got: %f", val1, val2)
-		}
-	}
-
-	return true, ""
 }
 
 func TestReadFile(t *testing.T) {
@@ -178,4 +133,50 @@ func TestNestedConversion(t *testing.T) {
 	if ok, err := compareSlices(testcase.Sample, result); !ok {
 		t.Error(err)
 	}
+}
+
+func compareSlices(s1, s2 interface{}) (bool, string) {
+	v1 := reflect.ValueOf(s1)
+	v2 := reflect.ValueOf(s2)
+
+	if v1.Kind() != reflect.Slice || v2.Kind() != reflect.Slice {
+		return false, "result is not slice"
+	}
+
+	for i := 0; i < v1.Len(); i++ {
+		val1 := v1.Index(i).Interface()
+		val2 := v2.Index(i).Interface()
+
+		switch val1 := val1.(type) {
+		case int:
+			switch val2 := val2.(type) {
+			case int:
+				if val1 != val2 {
+					return false, fmt.Sprintf("Expected: %d, Got: %d", val1, val2)
+				}
+			case int64:
+				if int64(val1) != val2 {
+					return false, fmt.Sprintf("Expected: %d, Got: %d", val1, val2)
+				}
+			default:
+				return false, fmt.Sprintf("Expected: %d, Got: %d", val1, val2)
+			}
+		case int64:
+			if val1 != val2.(int64) {
+				return false, fmt.Sprintf("Expected: %d, Got: %d", val1, val2)
+			}
+		case float32:
+			if val1 != val2.(float32) {
+				return false, fmt.Sprintf("Expected: %f, Got: %f", val1, val2)
+			}
+		case float64:
+			if val1 != val2.(float64) {
+				return false, fmt.Sprintf("Expected: %f, Got: %f", val1, val2)
+			}
+		default:
+			return false, fmt.Sprintf("Expected: %f, Got: %f", val1, val2)
+		}
+	}
+
+	return true, ""
 }
