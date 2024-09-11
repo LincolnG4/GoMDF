@@ -114,25 +114,43 @@ func (cn *ChannelReader) loadBuffer(f *os.File) error {
 	return nil
 }
 
+func readBlockFromFile(f *os.File, dataAddress int64, buf []byte) error {
+	var err error
+	if _, err = f.Seek(dataAddress+int64(blocks.HeaderSize), io.SeekStart); err != nil {
+		return err
+	}
+
+	_, err = io.ReadFull(f, buf)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (cn *ChannelReader) readBlockToMemory(f *os.File) error {
 	err := cn.loadBuffer(f)
 	if err != nil {
 		return err
 	}
 
-	if _, err = f.Seek(cn.DataAddress+int64(blocks.HeaderSize), io.SeekStart); err != nil {
-		return err
-	}
-
-	_, err = io.ReadFull(f, cn.MeasureBuffer)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return readBlockFromFile(f, cn.DataAddress, cn.MeasureBuffer)
 }
 
-func (cn *ChannelReader) readDT(pos int64) (interface{}, error) {
+func (cn *ChannelReader) readDatablock(f *os.File, pos int64) (interface{}, error) {
+	//check if end of datablock
+	if pos+int64(cn.SizeMeasureRow) > int64(len(cn.MeasureBuffer)) {
+		length, err := blocks.GetLength(f, cn.DataAddress)
+		if err != nil {
+			return nil, err
+		}
+
+		buf := make([]byte, length)
+		err = readBlockFromFile(f, cn.DataAddress, buf)
+		if err != nil {
+			return nil, err
+		}
+		cn.MeasureBuffer = append(cn.MeasureBuffer, buf...)
+	}
 	return parseSignalMeasure(cn.MeasureBuffer[pos:pos+int64(cn.SizeMeasureRow)], cn.ByteOrder, cn.DataType)
 }
 
@@ -164,7 +182,6 @@ func (c *Channel) readDataList(measure *[]interface{}) error {
 	target := len(dtl.Link.Data)
 	i := 0
 	for i < target {
-		//fmt.Println("next", i, measure)
 		c.channelReader = c.newChannelReader(dtl.Link.Data[i])
 		if err != nil {
 			return err
@@ -211,7 +228,7 @@ func (c *Channel) readDT(measure *[]interface{}) error {
 			return nil
 		}
 
-		value, err := c.channelReader.readDT(pos)
+		value, err := c.channelReader.readDatablock(c.mf4.File, pos)
 		if err != nil {
 			return err
 		}
@@ -226,7 +243,6 @@ func (c *Channel) readDT(measure *[]interface{}) error {
 // readMeasureFromSDBlock return extract sample measure from SDBlock or a list of SDBlocks
 func (c *Channel) readSdBlock(measure *[]interface{}) error {
 	var err error
-
 	if c.DataGroup.CachedDataGroup == nil {
 		err = c.channelReader.readBlockToMemory(c.mf4.File)
 		if err != nil {
@@ -249,7 +265,6 @@ func (c *Channel) readSdBlock(measure *[]interface{}) error {
 	}
 
 	*measure = append(*measure, value)
-
 	return nil
 }
 
