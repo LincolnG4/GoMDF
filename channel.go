@@ -156,7 +156,6 @@ func (cn *ChannelReader) readDatablock(f *os.File, pos int64) (interface{}, erro
 
 func (c *Channel) loadChannelReader(addr int64) *ChannelReader {
 	size := c.block.SignalBytesRange()
-
 	return &ChannelReader{
 		ByteOrder:      c.block.ByteOrder(),
 		SizeMeasureRow: int64(size),
@@ -294,7 +293,6 @@ func (c *Channel) readDataZipped(measure *[]interface{}) error {
 	}
 
 	c.channelReader.MeasureBuffer = c.DataGroup.CachedDataGroup
-
 	return c.extractSample(dz.BlockTypeModified(), measure)
 }
 
@@ -311,9 +309,6 @@ func (c *Channel) readHeaderList(measure *[]interface{}) error {
 
 	id := blocks.DlID
 	c.channelReader = c.newChannelReader(hl.Link.DlFirst)
-	if err != nil {
-		return err
-	}
 
 	return c.extractSample(id, measure)
 }
@@ -464,6 +459,7 @@ func (c *Channel) RawSample() ([]interface{}, error) {
 	}
 
 	c.channelReader = c.newChannelReader(c.startAddress)
+
 	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
 	err = c.extractSample(id, &measure)
 	if err != nil {

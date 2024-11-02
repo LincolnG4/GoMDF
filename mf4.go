@@ -30,9 +30,9 @@ type MF4 struct {
 	//Address to First File History Block
 	FileHistory int64
 
-	DataGroups   []*DataGroup
-	ChannelGroup []*ChannelGroup
-	Channels     []*Channel
+	DataGroups   []DataGroup
+	ChannelGroup []ChannelGroup
+	Channels     []Channel
 
 	//Unsorted
 	UnsortedBlocks []*UnsortedBlock
@@ -102,7 +102,7 @@ func (m *MF4) read() {
 
 	version := m.MdfVersion()
 	nextDataGroupAddress := m.firstDataGroup()
-	m.Channels = make([]*Channel, 0)
+	m.Channels = make([]Channel, 0)
 
 	dgindex := 0
 	for nextDataGroupAddress != 0 {
@@ -111,7 +111,7 @@ func (m *MF4) read() {
 		isUnsorted := false
 
 		dataGroup = NewDataGroup(file, nextDataGroupAddress)
-		m.DataGroups = append(m.DataGroups, &dataGroup)
+		m.DataGroups = append(m.DataGroups, dataGroup)
 
 		comment = MD.New(file, dataGroup.block.MetadataComment())
 
@@ -200,10 +200,10 @@ func (m *MF4) read() {
 				}
 
 				channelGroup.Channels[cn.Name] = cn
-				m.Channels = append(m.Channels, cn)
+				m.Channels = append(m.Channels, *cn)
 				nextAddressCN = cnBlock.Next()
 			}
-			m.ChannelGroup = append(m.ChannelGroup, channelGroup)
+			m.ChannelGroup = append(m.ChannelGroup, *channelGroup)
 			nextAddressCG = cgBlock.Next()
 		}
 
@@ -380,7 +380,7 @@ func (m *MF4) GetChannelSample(indexDataGroup int, channelName string) ([]interf
 }
 
 // ListAllChannelsNames returns an slice with all channels from the MF4 file
-func (m *MF4) ListAllChannels() []*Channel {
+func (m *MF4) ListAllChannels() []Channel {
 	return m.Channels
 }
 
@@ -422,8 +422,8 @@ func (m *MF4) MapAllChannelsNames() map[int]string {
 
 // MapAllChannels returns an map with all channels from the MF4 file group
 // by data group
-func (m *MF4) MapAllChannels() map[int]*Channel {
-	mp := make(map[int]*Channel)
+func (m *MF4) MapAllChannels() map[int]Channel {
+	mp := make(map[int]Channel)
 	for _, channel := range m.Channels {
 		mp[channel.DataGroupIndex] = channel
 	}
