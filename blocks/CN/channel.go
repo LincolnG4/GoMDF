@@ -248,6 +248,9 @@ func (b *Block) ByteOrder() binary.ByteOrder {
 
 // SignalBytesRange is number of Bytes required to store (cn_bit_count + cn_bit_offset) bits
 func (b *Block) SignalBytesRange() uint32 {
+	if b.Data.BitCount <= 8 {
+		return (8 + uint32(b.Data.BitOffset)) / 8
+	}
 	return (b.Data.BitCount + uint32(b.Data.BitOffset)) / 8
 }
 
