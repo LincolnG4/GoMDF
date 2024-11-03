@@ -143,7 +143,6 @@ func (cn *ChannelReader) readDatablock(f *os.File, pos int64) (interface{}, erro
 		if err != nil {
 			return nil, err
 		}
-
 		buf := make([]byte, length)
 		err = readBlockFromFile(f, cn.DataAddress, buf)
 		if err != nil {
@@ -221,13 +220,14 @@ func (c *Channel) readDT(measure *[]interface{}) error {
 		}
 	}
 
+	var value interface{}
 	pos := c.channelReader.StartOffset
 	for i := uint64(0); i < c.ChannelGroup.Data.CycleCount; i++ {
 		if pos >= int64(len(c.channelReader.MeasureBuffer)) {
 			return nil
 		}
 
-		value, err := c.channelReader.readDatablock(c.mf4.File, pos)
+		value, err = c.channelReader.readDatablock(c.mf4.File, pos)
 		if err != nil {
 			return err
 		}

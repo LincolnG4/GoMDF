@@ -96,10 +96,13 @@ func New(file *os.File, version uint16, startAdress int64) (*Block, error) {
 			return b.BlankBlock(), err
 		}
 	} else {
-		// Only present if "equal length" flag (bit 0 in dl_flags) is not set.
-		err = binary.Read(buf, binary.LittleEndian, &b.Data.Offset)
-		if err != nil {
-			return b.BlankBlock(), err
+		var v uint64
+		for i := 0; i < int(b.Data.Count); i++ {
+			err = binary.Read(buf, binary.LittleEndian, &v)
+			if err != nil {
+				return b.BlankBlock(), err
+			}
+			b.Data.Offset = append(b.Data.Offset, v)
 		}
 	}
 
