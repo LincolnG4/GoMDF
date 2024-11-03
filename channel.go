@@ -153,6 +153,10 @@ func (cn *ChannelReader) readDatablock(f *os.File, pos int64) (interface{}, erro
 	return parseSignalMeasure(cn.MeasureBuffer[pos:pos+int64(cn.SizeMeasureRow)], cn.ByteOrder, cn.DataType)
 }
 
+func (c *Channel) PrintProperties() {
+	fmt.Printf("%+v", c.block)
+}
+
 func (c *Channel) loadChannelReader(addr int64) *ChannelReader {
 	size := c.block.SignalBytesRange()
 	return &ChannelReader{
