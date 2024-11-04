@@ -90,7 +90,7 @@ func GetHeader(file *os.File, startAddress int64, blockID string) (Header, error
 
 	// Check if the block ID matches
 	if string(head.ID[:]) != blockID {
-		return Header{}, fmt.Errorf("invalid block ID")
+		return Header{}, fmt.Errorf("invalid block ID: expected %s, got: %s. Read block: %+v", blockID, string(head.ID[:]), head)
 	}
 
 	return head, nil

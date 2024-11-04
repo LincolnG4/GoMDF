@@ -223,7 +223,7 @@ func (m *MF4) Sort(us UnsortedBlock) error {
 	if err != nil {
 		return err
 	}
-
+	fmt.Println("The file is Unsorted!", headerID)
 	var (
 		addr             int64 = us.dataGroup.block.Link.Data
 		dtl              *DL.Block
@@ -305,14 +305,14 @@ func (m *MF4) Sort(us UnsortedBlock) error {
 		byteSize = int(us.dataGroup.block.RecordIDSize())
 		id, err := bytesOfRecordIDSize(byteSize, buf[pos:pos+byteSize])
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		pos += byteSize
 
 		cg, ok := us.channelGroupsByID[id]
 		if !ok {
-			panic(fmt.Sprintf("id %d not found", id))
+			return fmt.Errorf(fmt.Sprintf("id %d not found", id))
 		}
 
 		if cg.Block.IsVLSD() {
