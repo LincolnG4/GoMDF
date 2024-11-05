@@ -35,7 +35,7 @@ type MF4 struct {
 	Channels     []Channel
 
 	//Unsorted
-	UnsortedBlocks []*UnsortedBlock
+	UnsortedBlocks []UnsortedBlock
 
 	ReadOptions *ReadOptions
 }
@@ -208,7 +208,7 @@ func (m *MF4) read() {
 		}
 
 		if isUnsorted {
-			m.UnsortedBlocks = append(m.UnsortedBlocks, &UnsortedBlocks)
+			m.UnsortedBlocks = append(m.UnsortedBlocks, UnsortedBlocks)
 			m.Sort(UnsortedBlocks)
 		}
 
@@ -223,7 +223,7 @@ func (m *MF4) Sort(us UnsortedBlock) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("The file is Unsorted!", headerID)
+
 	var (
 		addr             int64 = us.dataGroup.block.Link.Data
 		dtl              *DL.Block

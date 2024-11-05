@@ -286,16 +286,18 @@ func (c *Channel) readDataZipped(measure *[]interface{}) error {
 		err error
 	)
 
+	fmt.Printf("DZ BLOCK: data address %d\n", c.channelReader.DataAddress)
 	dz, err = DZ.New(c.mf4.File, c.channelReader.DataAddress)
 	if err != nil {
 		return err
 	}
-
+	fmt.Printf("DZ BLOCK: BLock %+v \n", dz.Header)
 	c.DataGroup.CachedDataGroup, err = dz.Read()
 	if err != nil {
 		return err
 	}
-
+	fmt.Printf("DZ BLOCK: zip type %+v \n", dz.Data.ZipType)
+	fmt.Printf("DZ BLOCK: BLock %+v\n", dz.BlockTypeModified())
 	c.channelReader.MeasureBuffer = c.DataGroup.CachedDataGroup
 	return c.extractSample(dz.BlockTypeModified(), measure)
 }
@@ -438,7 +440,7 @@ func parseSignalMeasure(data []byte, byteOrder binary.ByteOrder, dataType interf
 	}
 }
 
-func (c *Channel) LoadDataAdress() {
+func (c *Channel) loadDataAdress() {
 	if c.block.Link.Data != 0 {
 		c.startAddress = c.block.Link.Data
 	} else {
@@ -449,20 +451,15 @@ func (c *Channel) LoadDataAdress() {
 // RawSample returns a array with the measures of the channel not applying
 // conversion block on it
 func (c *Channel) RawSample() ([]interface{}, error) {
-	c.LoadDataAdress()
-
-	if c.block.Link.Data != 0 {
-		c.startAddress = c.block.Link.Data
-	} else {
-		c.startAddress = c.DataGroup.DataAddress()
-	}
+	c.loadDataAdress()
 
 	id, err := blocks.GetHeaderID(c.mf4.File, c.startAddress)
 	if err != nil {
 		return nil, err
 	}
 
-	c.channelReader = c.newChannelReader(c.startAddress)
+	fmt.Printf("LOAD ADDRESS: %d\n", c.startAddress)
+	c.channelReader = c.loadChannelReader(c.startAddress)
 
 	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)
 	err = c.extractSample(id, &measure)

@@ -77,7 +77,7 @@ func GetHeader(file *os.File, startAddress int64, blockID string) (Header, error
 	head := Header{}
 
 	// Seek to the start address
-	_, errs := file.Seek(startAddress, 0)
+	_, errs := file.Seek(startAddress, io.SeekStart)
 	if errs != nil {
 		return Header{}, fmt.Errorf("failed to seek to start address: %v", errs)
 	}
@@ -119,7 +119,7 @@ func GetHeaderID(file *os.File, startAddress int64) (string, error) {
 	head := Header{}
 
 	// Seek to the start address
-	_, err := file.Seek(startAddress, 0)
+	_, err := file.Seek(startAddress, io.SeekStart)
 	if err != nil {
 		return "", fmt.Errorf("failed to seek to start address: %v", err)
 	}
