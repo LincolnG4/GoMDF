@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"os"
 
@@ -79,6 +80,8 @@ type Channel struct {
 	channelReader *ChannelReader
 
 	startAddress int64
+
+	compressedHL bool
 }
 
 type ChannelReader struct {
@@ -189,6 +192,13 @@ func (c *Channel) readDataList(measure *[]interface{}) error {
 			return err
 		}
 
+		if c.compressedHL {
+			id, err = blocks.GetHeaderID(c.mf4.File, dtl.Link.Data[i])
+			if err != nil {
+				return err
+			}
+		}
+
 		err = c.extractSample(id, measure)
 		if err != nil {
 			return err
@@ -274,6 +284,7 @@ func (c *Channel) readSdBlock(measure *[]interface{}) error {
 // extractSample returns a array with sample extracted from datablock based on
 // header id
 func (c *Channel) extractSample(id string, measure *[]interface{}) error {
+	slog.Debug("Block read:", id)
 	if c.block.IsVLSD() {
 		return c.readVLSDSample(id, measure)
 	}
@@ -286,18 +297,16 @@ func (c *Channel) readDataZipped(measure *[]interface{}) error {
 		err error
 	)
 
-	fmt.Printf("DZ BLOCK: data address %d\n", c.channelReader.DataAddress)
 	dz, err = DZ.New(c.mf4.File, c.channelReader.DataAddress)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("DZ BLOCK: BLock %+v \n", dz.Header)
+
 	c.DataGroup.CachedDataGroup, err = dz.Read()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("DZ BLOCK: zip type %+v \n", dz.Data.ZipType)
-	fmt.Printf("DZ BLOCK: BLock %+v\n", dz.BlockTypeModified())
+
 	c.channelReader.MeasureBuffer = c.DataGroup.CachedDataGroup
 	return c.extractSample(dz.BlockTypeModified(), measure)
 }
@@ -315,6 +324,7 @@ func (c *Channel) readHeaderList(measure *[]interface{}) error {
 
 	id := blocks.DlID
 	c.channelReader = c.newChannelReader(hl.Link.DlFirst)
+	c.compressedHL = true
 
 	return c.extractSample(id, measure)
 }
@@ -458,7 +468,6 @@ func (c *Channel) RawSample() ([]interface{}, error) {
 		return nil, err
 	}
 
-	fmt.Printf("LOAD ADDRESS: %d\n", c.startAddress)
 	c.channelReader = c.loadChannelReader(c.startAddress)
 
 	measure := make([]interface{}, 0, c.ChannelGroup.Data.CycleCount)

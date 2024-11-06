@@ -125,7 +125,7 @@ func GetHeaderID(file *os.File, startAddress int64) (string, error) {
 	}
 
 	// Read directly into the header struct
-	err = binary.Read(file, binary.LittleEndian, &head)
+	err = binary.Read(file, binary.LittleEndian, &head.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to read header: %v", err)
 	}

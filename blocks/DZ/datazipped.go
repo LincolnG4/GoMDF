@@ -130,9 +130,6 @@ func (b *Block) BlockType() string {
 
 // ID modified block with `#` ("##DT", "##SD", "##RD" or "##DV", "##DI", "##RV", "##RI")
 func (b *Block) BlockTypeModified() string {
-	if string(b.Data.OrgBlockType[:]) == "##DZ" {
-		return "##DT"
-	}
 	return "##" + string(b.Data.OrgBlockType[:])
 }
 
