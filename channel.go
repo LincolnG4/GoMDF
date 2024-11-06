@@ -284,7 +284,7 @@ func (c *Channel) readSdBlock(measure *[]interface{}) error {
 // extractSample returns a array with sample extracted from datablock based on
 // header id
 func (c *Channel) extractSample(id string, measure *[]interface{}) error {
-	slog.Debug("Block read:", id)
+	slog.Debug("Block read:" + id)
 	if c.block.IsVLSD() {
 		return c.readVLSDSample(id, measure)
 	}
