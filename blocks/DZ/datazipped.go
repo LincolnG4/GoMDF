@@ -143,7 +143,7 @@ func (b *Block) NewCompressType() (ZipBlock, error) {
 			CompressedLength:   b.Data.DataLenght,
 			Datablock:          &b.Data.Data,
 		}, nil
-	default:
+	case 1:
 		return &Transposition{
 			DecompressedID:     b.BlockTypeModified(),
 			CompressType:       b.Data.ZipType,
@@ -152,8 +152,8 @@ func (b *Block) NewCompressType() (ZipBlock, error) {
 			Parameter:          b.Data.ZipParameter,
 			Datablock:          &b.Data.Data,
 		}, nil
-		// default:
-		// 	return nil, fmt.Errorf("invalid decompress type %d", b.Data.ZipType)
+	default:
+		return nil, fmt.Errorf("invalid decompress type %d", b.Data.ZipType)
 	}
 }
 

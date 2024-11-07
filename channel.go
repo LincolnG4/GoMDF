@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"os"
 
@@ -104,30 +103,21 @@ type ChannelReader struct {
 	StartOffset int64
 }
 
-func (cn *ChannelReader) loadBuffer(f *os.File) error {
-	length, err := blocks.GetLength(f, cn.DataAddress)
-	if err != nil {
-		return err
+func (c *Channel) loadChannelReader(addr int64) *ChannelReader {
+	size := c.block.SignalBytesRange()
+	return &ChannelReader{
+		ByteOrder:      c.block.ByteOrder(),
+		SizeMeasureRow: int64(size),
+		DataType:       c.block.LoadDataType(int(size)),
+		DataAddress:    addr,
+		StartOffset:    int64(c.block.Data.ByteOffset) + int64(c.recordIDSize()),
+		RowSize:        int64(c.ChannelGroup.Data.DataBytes),
+		MeasureBuffer:  c.DataGroup.CachedDataGroup,
 	}
-
-	if length != uint64(len(cn.MeasureBuffer)) {
-		cn.MeasureBuffer = make([]byte, length)
-	}
-
-	return nil
 }
 
-func readBlockFromFile(f *os.File, dataAddress int64, buf []byte) error {
-	var err error
-	if _, err = f.Seek(dataAddress+int64(blocks.HeaderSize), io.SeekStart); err != nil {
-		return err
-	}
-
-	_, err = io.ReadFull(f, buf)
-	if err != nil {
-		return err
-	}
-	return nil
+func (c *Channel) recordIDSize() uint8 {
+	return c.DataGroup.block.RecordIDSize()
 }
 
 func (cn *ChannelReader) readBlockToMemory(f *os.File) error {
@@ -158,19 +148,6 @@ func (cn *ChannelReader) readDatablock(f *os.File, pos int64) (interface{}, erro
 
 func (c *Channel) PrintProperties() {
 	fmt.Printf("%+v", c.block)
-}
-
-func (c *Channel) loadChannelReader(addr int64) *ChannelReader {
-	size := c.block.SignalBytesRange()
-	return &ChannelReader{
-		ByteOrder:      c.block.ByteOrder(),
-		SizeMeasureRow: int64(size),
-		DataType:       c.block.LoadDataType(int(size)),
-		DataAddress:    addr,
-		StartOffset:    int64(c.block.Data.ByteOffset),
-		RowSize:        int64(c.ChannelGroup.Data.DataBytes),
-		MeasureBuffer:  c.DataGroup.CachedDataGroup,
-	}
 }
 
 func (c *Channel) readDataList(measure *[]interface{}) error {
@@ -284,7 +261,6 @@ func (c *Channel) readSdBlock(measure *[]interface{}) error {
 // extractSample returns a array with sample extracted from datablock based on
 // header id
 func (c *Channel) extractSample(id string, measure *[]interface{}) error {
-	slog.Debug("Block read:" + id)
 	if c.block.IsVLSD() {
 		return c.readVLSDSample(id, measure)
 	}
@@ -479,14 +455,6 @@ func (c *Channel) RawSample() ([]interface{}, error) {
 	return measure, err
 }
 
-func (c *Channel) loadDataBlockAddressDataList(cnReader *ChannelReader, i int) (int64, error) {
-	dtl, err := DL.New(c.mf4.File, c.mf4.MdfVersion(), cnReader.DataAddress)
-	if err != nil {
-		return -1, err
-	}
-	return dtl.Link.Data[i], nil
-}
-
 // readSingleDataBlock returns measure from DTBlock
 // func (c *Channel) readSingleDataBlock() ([]interface{}, error) {
 // 	return c.readSingleDT()
@@ -495,21 +463,6 @@ func (c *Channel) loadDataBlockAddressDataList(cnReader *ChannelReader, i int) (
 // readSingleDataBlock returns measure from DTBlock
 func (c *Channel) readSingleDataBlockVLSD() error {
 	return nil
-}
-
-// readDataList returns measure from DLBlock
-func (c *Channel) readDL(addr int64) ([]interface{}, error) {
-	return c.readDL(addr)
-}
-
-// signalValueAddress returns the offset from the signal in the DTBlock
-func (c *Channel) signalValueAddress(dataAddress int64) int64 {
-	return int64(blocks.HeaderSize) + dataAddress
-}
-
-// signalValueAddress returns the offset from the signal in the DTBlock
-func (c *Channel) datablockAddress(dataAddress int64) int64 {
-	return dataAddress
 }
 
 func (c *Channel) applyConversion(sample *[]interface{}) {
@@ -548,25 +501,36 @@ func (c *Channel) getRecordIDSize() uint8 {
 	return c.DataGroup.block.RecordIDSize()
 }
 
-func (c *Channel) readRecordID(recordArray []byte) int64 {
-	switch c.getRecordIDSize() {
-	case 1:
-		return int64(recordArray[0])
-	case 2:
-		return int64(binary.LittleEndian.Uint16(recordArray))
-	case 4:
-		return int64(binary.LittleEndian.Uint32(recordArray))
-	case 8:
-		return int64(binary.LittleEndian.Uint64(recordArray))
-	default:
-		return 0
-	}
-}
-
 func (c *Channel) getDataBytes() uint32 {
 	return c.ChannelGroup.GetDataBytes()
 }
 
 func (c *Channel) getInvalidationBitPos() uint32 {
 	return c.block.InvalBitPos()
+}
+
+func (cn *ChannelReader) loadBuffer(f *os.File) error {
+	length, err := blocks.GetLength(f, cn.DataAddress)
+	if err != nil {
+		return err
+	}
+
+	if length != uint64(len(cn.MeasureBuffer)) {
+		cn.MeasureBuffer = make([]byte, length)
+	}
+
+	return nil
+}
+
+func readBlockFromFile(f *os.File, dataAddress int64, buf []byte) error {
+	var err error
+	if _, err = f.Seek(dataAddress+int64(blocks.HeaderSize), io.SeekStart); err != nil {
+		return err
+	}
+
+	_, err = io.ReadFull(f, buf)
+	if err != nil {
+		return err
+	}
+	return nil
 }

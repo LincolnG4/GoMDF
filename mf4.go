@@ -111,7 +111,6 @@ func (m *MF4) read() {
 		isUnsorted := false
 
 		dataGroup = NewDataGroup(file, nextDataGroupAddress)
-		m.DataGroups = append(m.DataGroups, dataGroup)
 
 		comment = MD.New(file, dataGroup.block.MetadataComment())
 
@@ -132,8 +131,6 @@ func (m *MF4) read() {
 				SourceInfo: SI.Get(file, version, cgBlock.Link.SiAcqSource),
 				Comment:    comment,
 			}
-
-			dataGroup.ChannelGroup = append(dataGroup.ChannelGroup, channelGroup)
 
 			nextAddressCN := cgBlock.FirstChannel()
 			for nextAddressCN != 0 {
@@ -202,11 +199,13 @@ func (m *MF4) read() {
 				channelGroup.Channels[cn.Name] = cn
 				m.Channels = append(m.Channels, *cn)
 				nextAddressCN = cnBlock.Next()
+				dataGroup.ChannelGroup = append(dataGroup.ChannelGroup, channelGroup)
 			}
 			m.ChannelGroup = append(m.ChannelGroup, *channelGroup)
 			nextAddressCG = cgBlock.Next()
 		}
 
+		m.DataGroups = append(m.DataGroups, dataGroup)
 		if isUnsorted {
 			m.UnsortedBlocks = append(m.UnsortedBlocks, UnsortedBlocks)
 			m.Sort(UnsortedBlocks)
