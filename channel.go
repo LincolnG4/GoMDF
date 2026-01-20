@@ -162,7 +162,7 @@ func (c *Channel) loadChannelReader(addr int64) *ChannelReader {
 		DataType:       c.block.LoadDataType(int(size)),
 		DataAddress:    addr,
 		StartOffset:    int64(c.block.Data.ByteOffset),
-		RowSize:        int64(c.ChannelGroup.Data.DataBytes),
+		RowSize:        int64(c.ChannelGroup.Data.DataBytes) + int64(c.ChannelGroup.Data.InvalBytes),
 		MeasureBuffer:  c.DataGroup.CachedDataGroup,
 	}
 }
