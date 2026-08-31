@@ -16,18 +16,32 @@ for building tools (viewers, exporters) on top of it.
 - **Writes MDF files too**: a streaming writer for data loggers (bounded
   memory, crash-safe unfinalized layout, `Flush()` durability points) and
   a batch column API for exports, with optional DZ compression.
+- **Decodes CAN bus logs**: point it at a `.dbc` (or use the one embedded
+  in the log) and get physical signals instead of raw frame bytes.
+- **Sample reductions**: reads precomputed min/mean/max aggregates, so a
+  viewer can draw a multi-million-sample signal from a few hundred
+  records.
 - Supports sorted and unsorted files, compressed data (DZ deflate +
-  transposition), data lists (DL/HL), variable-length data (VLSD/SD),
-  invalidation bits, non-byte-aligned integer channels, channel-array
-  (CA) element expansion, the channel hierarchy (CH) tree, unfinalized
-  logger files (standard finalization steps applied in memory), and the
-  full set of conversion rules (linear, rational, algebraic formulas,
-  value/range tables, text tables).
+  transposition, inflated in parallel), data lists (DL/HL), MDF 4.2
+  column storage (LD/DV/DI), variable-length data (VLSD/SD),
+  invalidation bits, non-byte-aligned integer channels, all three
+  channel-array (CA) storage types, the channel hierarchy (CH) tree,
+  unfinalized logger files (standard finalization steps applied in
+  memory), and the full set of conversion rules (linear, rational,
+  algebraic formulas, value/range tables, text tables).
 
 The reader is validated against the official ASAM MDF 4.2 example suite
 (97/97 files) and cross-checked value-by-value against
 [asammdf](https://github.com/danielhrisca/asammdf); written files are
 verified to read back identically in asammdf.
+
+**Performance** (2M records x 8 channels, identical results, vs asammdf
+8.8.25): metadata open ~10x faster, uncompressed reads 4-5x, compressed
+reads up to 10x, record-by-record writing 3x faster than asammdf's numpy
+batch path at 16M records/s. Full table in the
+[manual](docs/MANUAL.md#9-performance-guide).
+
+Full usage documentation: **[docs/MANUAL.md](docs/MANUAL.md)**.
 
 ## Install
 
@@ -53,7 +67,7 @@ for _, g := range f.Groups() {
 // Read one channel (conversion applied; Time holds the master values)
 ch, _ := f.Channel("EngineSpeed")
 sig, err := ch.Read()
-plot(sig.Time, sig.Floats)
+fmt.Println(sig.Time, sig.Floats)
 
 // Raw values, or a window of samples
 raw, _ := ch.Read(mf4.Raw())
@@ -74,6 +88,17 @@ if err := it.Err(); err != nil {
 // Attachments
 atts, _ := f.Attachments()
 data, _ := atts[0].Data()
+
+// CAN logs: decode frames into physical signals with the embedded DBC
+sigs, _ := f.DecodeBus()
+for _, s := range sigs {
+    plot(s.Time, s.Floats)   // s.QualifiedName() e.g. "MsgSine.Sine"
+}
+
+// Precomputed min/mean/max aggregates for fast zoomed-out plots
+reds, _ := g.Reductions()
+rs, _ := reds[0].Read(ch)
+plotBand(rs.Mean.Time, rs.Min.Float64s(), rs.Max.Float64s())
 ```
 
 See `examples/mdf-reader` for a complete program.
@@ -83,7 +108,7 @@ See `examples/mdf-reader` for a complete program.
 | Option | Effect |
 |---|---|
 | `mf4.WithoutMmap()` | plain reads instead of mmap (network shares, etc.) |
-| `mf4.WithDecompressCacheSize(n)` | decompressed-block cache per data section |
+| `mf4.WithDecompressCacheSize(n)` | byte budget for cached decompressed blocks (default 128 MiB) |
 | `mf4.Raw()` | skip conversions, native recorded values |
 | `mf4.WithRange(from, n)` | sample window |
 | `mf4.WithChunkSamples(n)` | chunk size for `Chunks` |
@@ -128,11 +153,11 @@ records per second.
 
 ## Not supported yet
 
-- MDF 4.2 column-oriented storage (`##LD`/`##DV`) — returns `ErrUnsupported`
-- CA arrays with CG/DG-template storage (CN-template arrays, the common
-  case, are expanded into `name[i][j]` element channels)
-- Bus-signal decoding (CAN/LIN payload extraction via DBC-style signal
-  descriptions) — the frame channels themselves read fine
+- Bus databases other than DBC (ARXML, LDF); extended multiplexing
+  (`SG_MUL_VAL_`)
+- CA axis channels are not attached to their array (they read fine as
+  ordinary channels)
+- MDF 4.2 `RV`/`RI` column-oriented *reduction* data
 - Writer: invalidation bits, attachments, events, non-linear conversions
 
 Known divergences from asammdf (GoMDF follows the spec): UTF-16 string

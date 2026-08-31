@@ -44,7 +44,7 @@ func (dg *dataGroup) deinterleave() error {
 		recSize int // fixed record size, 0 for VLSD groups
 		vlsd    bool
 	}
-	bufs := make(map[uint64]*groupBuf, len(dg.groups))
+	bufs := make(map[uint64]*groupBuf, len(dg.groups)+len(dg.derivedIDs))
 	for _, cg := range dg.groups {
 		gb := &groupBuf{vlsd: cg.IsVLSD()}
 		if !gb.vlsd {
@@ -52,6 +52,13 @@ func (dg *dataGroup) deinterleave() error {
 			gb.buf = make([]byte, 0, int(cg.CycleCount)*gb.recSize)
 		}
 		bufs[cg.RecordID] = gb
+	}
+	// CG-template array elements share the parent group's record layout
+	// but use their own record IDs, without a CGBLOCK of their own.
+	for id, recSize := range dg.derivedIDs {
+		if _, ok := bufs[id]; !ok {
+			bufs[id] = &groupBuf{recSize: recSize}
+		}
 	}
 
 	// One sequential pass over the data section.

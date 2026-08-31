@@ -117,6 +117,10 @@ type ChannelGroup struct {
 	masterOnce sync.Once
 	masterVals []float64
 	masterErr  error
+
+	layoutOnce sync.Once
+	layoutVal  *recordLayout
+	layoutErr  error
 }
 
 // Channels returns the group's channels in file order (master included).
@@ -152,7 +156,8 @@ type Channel struct {
 	IsArray bool
 
 	group  *ChannelGroup
-	parent *Channel // enclosing structure channel, if a component
+	parent *Channel      // enclosing structure channel, if a component
+	elem   *arrayElement // set for CG/DG-template array elements
 	cn     *blocks.CN
 	cnAddr int64
 	cc     *blocks.CC

@@ -14,6 +14,10 @@
 // Large files can be read incrementally with ChannelGroup.Chunks or a
 // sample window with WithRange.
 //
+// CAN bus logs decode into physical signals with a DBC database (often
+// embedded in the log itself), and precomputed sample reductions give
+// min/mean/max aggregates for fast zoomed-out plots.
+//
 // The package also writes MDF files: Create a Writer, define groups and
 // channels, then stream records (Record/Append — the data-logger path,
 // crash-safe for a single uncompressed group) or write whole columns
