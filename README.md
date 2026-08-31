@@ -1,87 +1,148 @@
-# GoMDF - Read and Write ASAM MF4 FILES
-Go package for reading ASAM MF4 files.
+# GoMDF — fast ASAM MDF 4.x reader for Go
 
-## Installation
-⚠️ The package not finalized   !!! ⚠️
+GoMDF reads ASAM MDF 4.x (`.mf4`) measurement files — the standard format
+for automotive measurement data — with an API designed for large files and
+for building tools (viewers, exporters) on top of it.
+
+- **Fast on large files**: memory-mapped I/O, lazy block-level
+  decompression with caching, and typed columnar decoding (no per-sample
+  boxing). Channels decode in parallel.
+- **Typed signals**: samples come back as `[]float64`, `[]int64`,
+  `[]uint64`, `[]string` or `[][]byte` — never `[]interface{}`.
+- **Streaming**: read whole channels, sample windows, or iterate chunk by
+  chunk for progressive loading.
+- **Robust**: no panics on malformed files (fuzz-tested); errors carry the
+  block type and file offset.
+- **Writes MDF files too**: a streaming writer for data loggers (bounded
+  memory, crash-safe unfinalized layout, `Flush()` durability points) and
+  a batch column API for exports, with optional DZ compression.
+- Supports sorted and unsorted files, compressed data (DZ deflate +
+  transposition), data lists (DL/HL), variable-length data (VLSD/SD),
+  invalidation bits, non-byte-aligned integer channels, channel-array
+  (CA) element expansion, the channel hierarchy (CH) tree, unfinalized
+  logger files (standard finalization steps applied in memory), and the
+  full set of conversion rules (linear, rational, algebraic formulas,
+  value/range tables, text tables).
+
+The reader is validated against the official ASAM MDF 4.2 example suite
+(97/97 files) and cross-checked value-by-value against
+[asammdf](https://github.com/danielhrisca/asammdf); written files are
+verified to read back identically in asammdf.
+
+## Install
+
 ```
 go get github.com/LincolnG4/GoMDF
 ```
 
 ## Usage
 
-```Go
-package main
+```go
+f, err := mf4.Open("measurement.mf4")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
 
-import (
-	"fmt"
-	"os"
-
-	mf4 "github.com/LincolnG4/GoMDF"
-)
-
-func main() {
-	file, err := os.Open("sample1.mf4")
-	if err != nil {
-		panic(err)
-	}
-
-	m, err := mf4.ReadFile(file, &mf4.ReadOptions{})
-	if err != nil {
-		panic(err)
-	}
-
-
-	fmt.Println()
-	// Get channel samples
-	channels := m.ListAllChannels()
-
-	for _, channel := range channels {
-		samples, err := channel.Sample()
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Println(samples[:10])
-	}
-
-	sample, err := m.GetChannelSample(2, "EngTripFuel")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(sample[:10])
-	// Download attachments
-	//att := m.GetAttachments()[0]
-	//m.SaveAttachmentTo(att, "/PATH/TO/BE/SAVE/")
-
-	// Read Change logs
-	// m.ReadChangeLog()
-	// Access metadata
-	fmt.Println(m.Version())
-	fmt.Println("Version ID --> ", m.MdfVersion())
-	fmt.Println("Start Time NS --> ", m.GetStartTimeNs())
-	fmt.Println("Start StartTimeLT --> ", m.GetStartTimeLT())
-	fmt.Println()
-	fmt.Println("List Names -->", m.ListAllChannelsNames())
-	fmt.Println("Mapped Channels -->", m.MapAllChannels())
+// Metadata
+fmt.Println(f.Version(), f.StartTime())
+for _, g := range f.Groups() {
+    fmt.Println(g.Name, g.RecordCount, len(g.Channels()))
 }
 
+// Read one channel (conversion applied; Time holds the master values)
+ch, _ := f.Channel("EngineSpeed")
+sig, err := ch.Read()
+plot(sig.Time, sig.Floats)
+
+// Raw values, or a window of samples
+raw, _ := ch.Read(mf4.Raw())
+win, _ := ch.Read(mf4.WithRange(1_000_000, 10_000))
+
+// Everything, in parallel
+signals, err := f.ReadAll()
+
+// Stream a big group chunk by chunk
+it := ch.Group().Chunks(ch.Group().Channels(), mf4.WithChunkSamples(100_000))
+for sigs := range it.All() {
+    // sigs are aligned; sigs[i].Offset marks the window start
+}
+if err := it.Err(); err != nil {
+    log.Fatal(err)
+}
+
+// Attachments
+atts, _ := f.Attachments()
+data, _ := atts[0].Data()
 ```
 
-## Features
-- Parse MF4 file format and load metadata
-- Extract channel sample data 
-- Support for attachments
-- Support for Events
-- Access to common metadata fields
-- Documentation
-- Documentation is available at https://godoc.org/github.com/LincolnG4/GoMDF
+See `examples/mdf-reader` for a complete program.
 
-## Contributing
-Pull requests are welcome! Please open any issues.
+## Options
 
-This provides a high-level overview of how to use the package from Go code along with installation instructions. Let me know if any part of the README explanation could be improved!
+| Option | Effect |
+|---|---|
+| `mf4.WithoutMmap()` | plain reads instead of mmap (network shares, etc.) |
+| `mf4.WithDecompressCacheSize(n)` | decompressed-block cache per data section |
+| `mf4.Raw()` | skip conversions, native recorded values |
+| `mf4.WithRange(from, n)` | sample window |
+| `mf4.WithChunkSamples(n)` | chunk size for `Chunks` |
 
-## References 
+## Writing
 
-[ASAM MDF](https://github.com/danielhrisca/asammdf)  
-[MDF Validator ](https://www.vector.com/int/en/products/application-areas/ecu-calibration/measurement/mdf/) 
+```go
+w, _ := mf4.Create("drive.mf4")            // add mf4.WithCompression() for DZ
+eng, _ := w.NewGroup("Engine")             // gets a float64 "t" master at index 0
+spd  := eng.Float64("EngineSpeed", "rpm")
+gear := eng.Int("Gear", "", 8)
+adc  := eng.Uint("RawADC", "V", 16)
+eng.SetLinearConversion(adc, 0, 0.001)     // phys = 0.001 * raw
+msg  := eng.String("Message")              // VLSD text channel
+
+rec := eng.Record()                        // reusable, allocation-free
+for running {
+    rec.SetFloat64(0, tSeconds)
+    rec.SetFloat64(spd, speed)
+    rec.SetInt(gear, g)
+    rec.SetUint(adc, raw)
+    rec.SetString(msg, note)
+    eng.Append(rec)
+    // w.Flush() at checkpoints: the file on disk is readable even if
+    // power is lost before Close (unfinalized-MDF logger layout).
+}
+w.Close()                                  // finalizes the file
+```
+
+Batch data goes through `AppendColumns`:
+
+```go
+g.AppendColumns(n, mf4.Column{Ch: 0, F: timestamps},
+                   mf4.Column{Ch: temp, F: values})
+```
+
+Layout is picked automatically: one group without compression streams
+into a single growing data block (crash-safe); several groups or
+compression produce a sorted multi-group file with per-group chunked
+data lists. Streaming throughput is on the order of tens of millions of
+records per second.
+
+## Not supported yet
+
+- MDF 4.2 column-oriented storage (`##LD`/`##DV`) — returns `ErrUnsupported`
+- CA arrays with CG/DG-template storage (CN-template arrays, the common
+  case, are expanded into `name[i][j]` element channels)
+- Bus-signal decoding (CAN/LIN payload extraction via DBC-style signal
+  descriptions) — the frame channels themselves read fine
+- Writer: invalidation bits, attachments, events, non-linear conversions
+
+Known divergences from asammdf (GoMDF follows the spec): UTF-16 string
+channels are actually decoded; range-to-scale partial conversions use
+the spec's `min <= v < max` matching for any sample count; CA element
+byte offsets follow the spec formula (verified against raw records).
+
+## Testing
+
+`go test ./...` runs unit, sample-file and golden tests. Golden files
+under `testdata/golden` are generated with
+`testdata/scripts/gen_golden.py` (requires Python + asammdf) and
+committed, so CI needs no Python.

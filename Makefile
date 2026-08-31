@@ -1,8 +1,8 @@
 build:
-	go build -o bin/gomdf
+	go build ./...
 
 run: build
-	./bin/gomdf
+	go run ./examples/mdf-reader samples/sample3.mf4
 
 test:
 	go test -v ./... -count=1 -v
