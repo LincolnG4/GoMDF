@@ -198,3 +198,17 @@ func extractInvalid(dst *Bitset, spec ColumnSpec, buf []byte, recSize, count int
 		dst.Append(buf[r*recSize+byteIdx]&mask != 0)
 	}
 }
+
+// ExtractInvalidBits appends count invalidation flags read from a
+// stand-alone invalidation-byte stream (MDF 4.2 DI blocks): buf holds
+// count entries of stride bytes, bitPos indexes the bit within each.
+func ExtractInvalidBits(dst *Bitset, buf []byte, stride, count int, bitPos uint32) {
+	byteIdx := int(bitPos) / 8
+	mask := byte(1) << (bitPos % 8)
+	if byteIdx >= stride {
+		return
+	}
+	for r := 0; r < count; r++ {
+		dst.Append(buf[r*stride+byteIdx]&mask != 0)
+	}
+}

@@ -11,15 +11,21 @@ package datasection
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"sort"
+	"sync"
 
 	"github.com/LincolnG4/GoMDF/internal/blocks"
 	"github.com/LincolnG4/GoMDF/internal/source"
 )
 
-// ErrUnsupported marks valid MDF layouts this package cannot read yet
-// (MDF 4.2 column-oriented storage).
+// ErrUnsupported marks valid MDF layouts this package cannot read yet.
 var ErrUnsupported = errors.New("unsupported data section layout")
+
+// ErrColumnStorage reports that the section uses MDF 4.2 column-oriented
+// storage (LD/DV blocks); callers that know the record sizes should
+// retry with NewColumnStorage.
+var ErrColumnStorage = errors.New("column-oriented storage")
 
 type segKind uint8
 
@@ -27,6 +33,7 @@ const (
 	segStored segKind = iota // plain bytes in the file
 	segDeflate
 	segTransposeDeflate
+	segZero // reads as zero bytes (omitted invalidation blocks)
 )
 
 // segment maps a logical byte range of the data section onto the file.
@@ -49,20 +56,21 @@ type Reader struct {
 }
 
 // New resolves the data section starting at addr. addr == 0 yields an
-// empty reader. cacheSize is the number of decompressed DZ payloads kept.
-func New(src source.Source, addr int64, cacheSize int) (*Reader, error) {
-	return newReader(src, addr, cacheSize, false)
+// empty reader. cacheBytes bounds the decompressed-block cache
+// (<= 0: the 128 MiB default).
+func New(src source.Source, addr int64, cacheBytes int64) (*Reader, error) {
+	return newReader(src, addr, cacheBytes, false)
 }
 
 // NewFinalizing is New for unfinalized files: a last data block whose
 // stored length overruns the end of the file (finalization flag "update
 // of length for last DT block required") is clamped to the file end.
-func NewFinalizing(src source.Source, addr int64, cacheSize int) (*Reader, error) {
-	return newReader(src, addr, cacheSize, true)
+func NewFinalizing(src source.Source, addr int64, cacheBytes int64) (*Reader, error) {
+	return newReader(src, addr, cacheBytes, true)
 }
 
-func newReader(src source.Source, addr int64, cacheSize int, clamp bool) (*Reader, error) {
-	r := &Reader{src: src, cache: newLRU(cacheSize), clamp: clamp}
+func newReader(src source.Source, addr int64, cacheBytes int64, clamp bool) (*Reader, error) {
+	r := &Reader{src: src, cache: newLRU(cacheBytes), clamp: clamp}
 	if addr == 0 {
 		return r, nil
 	}
@@ -74,8 +82,12 @@ func newReader(src source.Source, addr int64, cacheSize int, clamp bool) (*Reade
 			r.size = end
 		}
 	}
-	sort.Slice(r.segs, func(i, j int) bool { return r.segs[i].logical < r.segs[j].logical })
+	sortSegs(r.segs)
 	return r, nil
+}
+
+func sortSegs(segs []segment) {
+	sort.Slice(segs, func(i, j int) bool { return segs[i].logical < segs[j].logical })
 }
 
 // Size returns the logical (uncompressed) size of the data section.
@@ -99,8 +111,10 @@ func (r *Reader) resolve(addr int64) error {
 		return r.resolveDLChain(hl.DLFirst)
 	case blocks.IDDL:
 		return r.resolveDLChain(addr)
-	case blocks.IDLD, blocks.IDDI, blocks.IDRV, blocks.IDRI:
-		return fmt.Errorf("%w: %s column-oriented storage", ErrUnsupported, id)
+	case blocks.IDLD:
+		return fmt.Errorf("%w at offset 0x%x", ErrColumnStorage, addr)
+	case blocks.IDDI, blocks.IDRV, blocks.IDRI:
+		return fmt.Errorf("%w: unexpected %s block", ErrUnsupported, id)
 	default:
 		return fmt.Errorf("unexpected data block %q at offset 0x%x", id, addr)
 	}
@@ -236,6 +250,7 @@ func (r *Reader) ReadAt(p []byte, off int64) (int, error) {
 	if off < 0 || off > r.size {
 		return 0, fmt.Errorf("%w: offset %d, size %d", source.ErrOutOfBounds, off, r.size)
 	}
+	r.prefetch(off, int64(len(p)))
 	n := 0
 	for n < len(p) && off < r.size {
 		// Find the last segment starting at or before off.
@@ -256,6 +271,10 @@ func (r *Reader) ReadAt(p []byte, off int64) (int, error) {
 				return n, err
 			}
 			copy(p[n:], b)
+		case segZero:
+			for i := int64(0); i < want; i++ {
+				p[n+int(i)] = 0
+			}
 		default:
 			buf, err := r.decompressed(seg)
 			if err != nil {
@@ -281,4 +300,55 @@ func NewFromBytes(src source.Source) (*Reader, error) {
 		r.segs = []segment{{logical: 0, length: n, addr: 0, kind: segStored}}
 	}
 	return r, nil
+}
+
+// prefetch decompresses, in parallel, all compressed segments of the
+// range [off, off+n) that are not in the cache yet. Sequential reads of
+// a freshly opened compressed file then use every core instead of
+// inflating block by block.
+func (r *Reader) prefetch(off, n int64) {
+	first := sort.Search(len(r.segs), func(i int) bool { return r.segs[i].logical > off }) - 1
+	if first < 0 {
+		first = 0
+	}
+	// Look ahead beyond the requested range: sequential readers then
+	// find the next blocks already inflated.
+	lookahead := runtime.NumCPU() * 2
+	var missing []*segment
+	for i := first; i < len(r.segs) && len(missing) < lookahead; i++ {
+		seg := &r.segs[i]
+		if seg.kind == segStored {
+			continue
+		}
+		if seg.logical >= off+n && len(missing) == 0 {
+			break // range itself needs nothing
+		}
+		if _, ok := r.cache.get(seg.addr); !ok {
+			missing = append(missing, seg)
+		}
+	}
+	if len(missing) < 2 {
+		return // nothing to parallelize
+	}
+	workers := runtime.NumCPU()
+	if workers > len(missing) {
+		workers = len(missing)
+	}
+	var wg sync.WaitGroup
+	next := make(chan *segment, len(missing))
+	for _, seg := range missing {
+		next <- seg
+	}
+	close(next)
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for seg := range next {
+				// Errors surface on the sequential path right after.
+				r.decompressed(seg) //nolint:errcheck
+			}
+		}()
+	}
+	wg.Wait()
 }

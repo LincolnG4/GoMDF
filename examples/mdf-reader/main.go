@@ -44,6 +44,35 @@ func main() {
 		}
 	}
 
+	// Precomputed reductions, if the writer stored any.
+	for _, g := range f.Groups() {
+		reds, err := g.Reductions()
+		if err != nil || len(reds) == 0 {
+			continue
+		}
+		fmt.Printf("\nreductions for %q:\n", g.Name)
+		for _, r := range reds {
+			fmt.Printf("  interval %g (sync %d): %d records\n", r.Interval, r.Sync, r.CycleCount)
+		}
+	}
+
+	// CAN logs: decode frames with the embedded database.
+	if len(f.BusFrameGroups()) > 0 {
+		sigs, err := f.DecodeBus()
+		if err != nil {
+			fmt.Printf("\nbus decoding: %v\n", err)
+		} else {
+			fmt.Printf("\ndecoded bus signals (%d):\n", len(sigs))
+			for _, s := range sigs {
+				head := s.Floats
+				if len(head) > 5 {
+					head = head[:5]
+				}
+				fmt.Printf("  %-30s [%s] %d samples %v\n", s.QualifiedName(), s.Unit, s.Len(), head)
+			}
+		}
+	}
+
 	if atts, err := f.Attachments(); err == nil && len(atts) > 0 {
 		fmt.Println("\nattachments:")
 		for _, a := range atts {

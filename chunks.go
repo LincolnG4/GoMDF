@@ -37,7 +37,20 @@ func (g *ChannelGroup) Chunks(channels []*Channel, opts ...ReadOption) *Chunks {
 			return it
 		}
 	}
-	from, count, err := it.cfg.resolveRange(int(g.RecordCount))
+	// Iterate over the records every requested channel has: array
+	// elements of a fragmented array may hold fewer than the group.
+	total := int(g.RecordCount)
+	for _, c := range channels {
+		_, n, err := c.source()
+		if err != nil {
+			it.err = err
+			return it
+		}
+		if n < total {
+			total = n
+		}
+	}
+	from, count, err := it.cfg.resolveRange(total)
 	if err != nil {
 		it.err = err
 		return it
@@ -74,7 +87,12 @@ func (it *Chunks) Next() bool {
 	var master []float64
 	g := it.group
 	if g.master != nil {
-		vals, err := g.readMasterFloats(&cfg)
+		layout, total, err := g.master.source()
+		if err != nil {
+			it.err = fmt.Errorf("group %q master: %w", g.Name, err)
+			return false
+		}
+		vals, err := g.readMasterFloats(&cfg, layout, total)
 		if err != nil {
 			it.err = fmt.Errorf("group %q master: %w", g.Name, err)
 			return false

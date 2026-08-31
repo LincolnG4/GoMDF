@@ -60,6 +60,10 @@ type dataGroup struct {
 	section     *datasection.Reader
 	sectionErr  error
 
+	// derivedIDs maps the record IDs of CG-template array elements —
+	// which have no CGBLOCK of their own — to their record size.
+	derivedIDs map[uint64]int
+
 	// De-interleave state for unsorted files: one record stream per
 	// record ID, built lazily on first read.
 	dinOnce sync.Once
@@ -200,8 +204,14 @@ func (f *File) expandArray(g *ChannelGroup, parent *Channel, caAddr int64) error
 		if err != nil {
 			return err
 		}
-		if ca.Storage != blocks.CAStorageCNTemplate || len(ca.DimSize) == 0 {
-			return nil // CG/DG-template storage stays a raw byte column
+		if len(ca.DimSize) == 0 {
+			return nil
+		}
+		if ca.Storage != blocks.CAStorageCNTemplate {
+			// "Fragmented" array: each element is recorded in its own
+			// records (own record ID or own data section), all sharing
+			// the parent's record layout.
+			return f.expandFragmentedArray(g, parent, ca)
 		}
 		// Within one level: row-major, last dimension has stride
 		// ca_byte_offset_base, earlier dimensions multiply up.
@@ -274,25 +284,75 @@ func (f *File) expandArray(g *ChannelGroup, parent *Channel, caAddr int64) error
 // were never written).
 func (f *File) fixCycleCounts() error {
 	for _, g := range f.groups {
-		recSize := int64(g.cg.RecordSize())
-		if recSize == 0 {
+		if g.cg.RecordSize() == 0 {
 			continue
 		}
-		if g.dg.block.RecIDSize == 0 {
-			r, err := g.dg.sectionReader()
-			if err != nil {
-				return err
-			}
-			g.RecordCount = uint64(r.Size() / recSize)
-			g.cg.CycleCount = g.RecordCount
-		} else {
-			r, err := g.dg.deinterleaved(g.cg.RecordID)
-			if err != nil {
-				return err
-			}
-			g.RecordCount = uint64(r.Size() / recSize)
-			g.cg.CycleCount = g.RecordCount
+		layout, err := g.recordLayout()
+		if err != nil {
+			return err
 		}
+		g.RecordCount = uint64(layout.data.Size() / int64(layout.recSize))
+		g.cg.CycleCount = g.RecordCount
+	}
+	return nil
+}
+
+// expandFragmentedArray adds one element channel per array element for
+// CG-template (own record ID in an unsorted group) and DG-template (own
+// data section) storage. All elements share the parent's record layout,
+// so only the record source and cycle count differ.
+func (f *File) expandFragmentedArray(g *ChannelGroup, parent *Channel, ca *blocks.CA) error {
+	total := ca.ElementCount()
+	if total <= 1 || total > 1<<20 {
+		return nil
+	}
+	if ca.Storage == blocks.CAStorageDGTemplate && uint64(len(ca.DataLinks)) < total {
+		return nil
+	}
+	idx := make([]uint64, len(ca.DimSize))
+	for k := uint64(0); k < total; k++ {
+		rem := k
+		for d := len(ca.DimSize) - 1; d >= 0; d-- {
+			idx[d] = rem % ca.DimSize[d]
+			rem /= ca.DimSize[d]
+		}
+		name := parent.Name
+		for _, i := range idx {
+			name += fmt.Sprintf("[%d]", i)
+		}
+		elem := &arrayElement{recordCount: g.RecordCount}
+		if int(k) < len(ca.CycleCounts) {
+			elem.recordCount = ca.CycleCounts[k]
+		}
+		if ca.Storage == blocks.CAStorageDGTemplate {
+			elem.dataAddr = ca.DataLinks[k]
+			if elem.dataAddr == 0 {
+				continue // element was not recorded at all
+			}
+		} else {
+			elem.recordID = g.cg.RecordID + k
+			if g.dg.derivedIDs == nil {
+				g.dg.derivedIDs = make(map[uint64]int)
+			}
+			g.dg.derivedIDs[elem.recordID] = int(g.cg.RecordSize())
+		}
+		cnCopy := *parent.cn
+		cnCopy.Composition = 0
+		g.channels = append(g.channels, &Channel{
+			Name:       name,
+			Unit:       parent.Unit,
+			Comment:    parent.Comment,
+			Source:     parent.Source,
+			Type:       parent.Type,
+			DataType:   parent.DataType,
+			BitCount:   parent.BitCount,
+			Conversion: parent.Conversion,
+			group:      g,
+			parent:     parent,
+			elem:       elem,
+			cn:         &cnCopy,
+			cc:         parent.cc,
+		})
 	}
 	return nil
 }

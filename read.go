@@ -1,6 +1,7 @@
 package mf4
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -70,7 +71,14 @@ func (c *Channel) Read(opts ...ReadOption) (*Signal, error) {
 		return nil, fmt.Errorf("channel %q: %w", c.Name, err)
 	}
 	if c.group.master != nil && c.group.master != c {
-		master, err := c.group.masterValues(&cfg)
+		// Master samples come from the same data source as the channel:
+		// for CG/DG-template array elements that is the element's own
+		// record stream, which has its own timestamps.
+		layout, total, err := c.source()
+		if err != nil {
+			return nil, fmt.Errorf("channel %q: %w", c.Name, err)
+		}
+		master, err := c.group.masterValues(&cfg, layout, total, c.elem == nil)
 		if err != nil {
 			return nil, fmt.Errorf("channel %q: master: %w", c.Name, err)
 		}
@@ -81,10 +89,28 @@ func (c *Channel) Read(opts ...ReadOption) (*Signal, error) {
 	return sig, nil
 }
 
+// source returns the record stream this channel reads from and the
+// number of records it holds. Ordinary channels share their group's
+// stream; CG/DG-template array elements have their own.
+func (c *Channel) source() (*recordLayout, int, error) {
+	if c.elem != nil {
+		layout, err := c.elem.resolve(c.group)
+		return layout, int(c.elem.recordCount), err
+	}
+	layout, err := c.group.recordLayout()
+	if err != nil {
+		return nil, 0, err
+	}
+	return layout, int(c.group.RecordCount), nil
+}
+
 // read decodes the samples without attaching master values.
 func (c *Channel) read(cfg *readConfig) (*Signal, error) {
-	g := c.group
-	from, count, err := cfg.resolveRange(int(g.RecordCount))
+	layout, total, err := c.source()
+	if err != nil {
+		return nil, err
+	}
+	from, count, err := cfg.resolveRange(total)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +124,7 @@ func (c *Channel) read(cfg *readConfig) (*Signal, error) {
 	if err != nil {
 		return nil, err
 	}
-	col, err := c.extractColumn(cfg, conv, from, count)
+	col, err := c.extractColumn(cfg, conv, layout, from, count)
 	if err != nil {
 		return nil, err
 	}
@@ -120,11 +146,17 @@ func (c *Channel) read(cfg *readConfig) (*Signal, error) {
 }
 
 // extractColumn runs the chunked record extraction for this channel.
-func (c *Channel) extractColumn(cfg *readConfig, conv *conversion.Conversion, from, count int) (*records.Column, error) {
-	g := c.group
+func (c *Channel) extractColumn(cfg *readConfig, conv *conversion.Conversion, layout *recordLayout, from, count int) (*records.Column, error) {
 	spec, err := c.columnSpec(cfg, conv)
 	if err != nil {
 		return nil, err
+	}
+	// Column storage keeps invalidation bytes in a separate stream; the
+	// inline extraction must then be disabled and run apart.
+	sepInvalBit := int64(-1)
+	if spec.InvalBit >= 0 && layout.inval != nil {
+		sepInvalBit = spec.InvalBit
+		spec.InvalBit = -1
 	}
 	col, err := records.NewColumn(spec, count)
 	if err != nil {
@@ -133,15 +165,11 @@ func (c *Channel) extractColumn(cfg *readConfig, conv *conversion.Conversion, fr
 	if count == 0 {
 		return col, nil
 	}
-	r, err := g.recordSource()
-	if err != nil {
-		return nil, err
-	}
-	recSize := int(g.cg.RecordSize())
+	recSize := layout.recSize
 	if recSize == 0 {
 		return nil, fmt.Errorf("record size 0")
 	}
-	total := int(r.Size() / int64(recSize))
+	total := int(layout.data.Size() / int64(recSize))
 	if from+count > total {
 		return nil, fmt.Errorf("data section holds %d records, need %d", total, from+count)
 	}
@@ -160,7 +188,7 @@ func (c *Channel) extractColumn(cfg *readConfig, conv *conversion.Conversion, fr
 			n = count - done
 		}
 		off := int64(from+done) * int64(recSize)
-		if _, err := r.ReadAt(buf[:n*recSize], off); err != nil {
+		if _, err := layout.data.ReadAt(buf[:n*recSize], off); err != nil {
 			return nil, err
 		}
 		if err := records.Extract(col, spec, buf[:n*recSize], recSize, n); err != nil {
@@ -168,7 +196,34 @@ func (c *Channel) extractColumn(cfg *readConfig, conv *conversion.Conversion, fr
 		}
 		done += n
 	}
+	if sepInvalBit >= 0 {
+		if col.Invalid, err = readSeparateInvalid(layout, sepInvalBit, from, count); err != nil {
+			return nil, err
+		}
+	}
 	return col, nil
+}
+
+// readSeparateInvalid reads a channel's invalidation bits from a
+// column-storage DI stream.
+func readSeparateInvalid(layout *recordLayout, bitPos int64, from, count int) (*records.Bitset, error) {
+	dst := records.NewBitset(count)
+	stride := layout.invalSize
+	buf := make([]byte, ((1<<18)/stride+1)*stride)
+	chunk := len(buf) / stride
+	for done := 0; done < count; {
+		n := chunk
+		if done+n > count {
+			n = count - done
+		}
+		off := int64(from+done) * int64(stride)
+		if _, err := layout.inval.ReadAt(buf[:n*stride], off); err != nil {
+			return nil, err
+		}
+		records.ExtractInvalidBits(dst, buf[:n*stride], stride, n, uint32(bitPos))
+		done += n
+	}
+	return dst, nil
 }
 
 // columnSpec builds the extraction spec, deciding the storage class from
@@ -252,23 +307,46 @@ func (c *Channel) readVirtual(cfg *readConfig, from, count int) (*Signal, error)
 	return sig, nil
 }
 
-// masterValues returns the group's master samples for the given range,
-// cached for full-range reads.
-func (g *ChannelGroup) masterValues(cfg *readConfig) ([]float64, error) {
-	full := cfg.from == 0 && (cfg.count < 0 || cfg.count >= int(g.RecordCount))
-	if full {
+// masterValues returns the master samples for the given range, read
+// from layout. Full-range reads of the group's own stream are cached;
+// per-element streams are not (they are read once per element anyway).
+func (g *ChannelGroup) masterValues(cfg *readConfig, layout *recordLayout, total int, cacheable bool) ([]float64, error) {
+	full := cfg.from == 0 && (cfg.count < 0 || cfg.count >= total)
+	if full && cacheable {
 		g.masterOnce.Do(func() {
-			g.masterVals, g.masterErr = g.readMasterFloats(&readConfig{count: -1})
+			g.masterVals, g.masterErr = g.readMasterFloats(&readConfig{count: -1}, layout, total)
 		})
 		return g.masterVals, g.masterErr
 	}
-	return g.readMasterFloats(cfg)
+	return g.readMasterFloats(cfg, layout, total)
 }
 
-func (g *ChannelGroup) readMasterFloats(cfg *readConfig) ([]float64, error) {
+// readMasterFloats reads the group's master channel through layout.
+func (g *ChannelGroup) readMasterFloats(cfg *readConfig, layout *recordLayout, total int) ([]float64, error) {
 	mCfg := *cfg
 	mCfg.raw = false
-	sig, err := g.master.read(&mCfg)
+	from, count, err := mCfg.resolveRange(total)
+	if err != nil {
+		return nil, err
+	}
+	m := g.master
+	var sig *Signal
+	if m.Type == VirtualMaster || m.Type == VirtualData {
+		sig, err = m.readVirtual(&mCfg, from, count)
+	} else {
+		conv, cerr := m.compiledConversion()
+		if cerr != nil {
+			return nil, cerr
+		}
+		col, xerr := m.extractColumn(&mCfg, conv, layout, from, count)
+		if xerr != nil {
+			return nil, xerr
+		}
+		if err = applyConversion(col, conv); err != nil {
+			return nil, err
+		}
+		sig = fromColumn(m, col, from)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -278,23 +356,56 @@ func (g *ChannelGroup) readMasterFloats(cfg *readConfig) ([]float64, error) {
 	return sig.Floats, nil
 }
 
-// recordSource returns the group's record bytes as a random-access
-// reader: the data section directly for sorted files, the de-interleaved
-// buffer for unsorted ones.
-func (g *ChannelGroup) recordSource() (*datasection.Reader, error) {
-	if g.dg.block.RecIDSize == 0 {
-		return g.dg.sectionReader()
+// recordLayout describes where a group's record bytes live: one stream
+// of full records (invalidation bytes inline), or — for MDF 4.2 column
+// storage — separate sample and invalidation streams.
+type recordLayout struct {
+	data      *datasection.Reader
+	inval     *datasection.Reader // nil: invalidation inline (or none)
+	recSize   int                 // record stride within data
+	invalSize int                 // record stride within inval
+}
+
+// recordLayout resolves (and caches) the group's record streams.
+func (g *ChannelGroup) recordLayout() (*recordLayout, error) {
+	g.layoutOnce.Do(func() {
+		g.layoutVal, g.layoutErr = g.resolveLayout()
+	})
+	return g.layoutVal, g.layoutErr
+}
+
+func (g *ChannelGroup) resolveLayout() (*recordLayout, error) {
+	if g.dg.block.RecIDSize != 0 {
+		r, err := g.dg.deinterleaved(g.cg.RecordID)
+		if err != nil {
+			return nil, err
+		}
+		return &recordLayout{data: r, recSize: int(g.cg.RecordSize())}, nil
 	}
-	return g.dg.deinterleaved(g.cg.RecordID)
+	r, err := g.dg.sectionReader()
+	if errors.Is(err, datasection.ErrColumnStorage) {
+		f := g.file
+		data, inval, cerr := datasection.NewColumnStorage(f.src, g.dg.block.Data,
+			f.cfg.cacheBytes, int(g.cg.DataBytes), int(g.cg.InvalBytes), f.finalize)
+		if cerr != nil {
+			return nil, cerr
+		}
+		return &recordLayout{data: data, inval: inval,
+			recSize: int(g.cg.DataBytes), invalSize: int(g.cg.InvalBytes)}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &recordLayout{data: r, recSize: int(g.cg.RecordSize())}, nil
 }
 
 // sectionReader lazily builds the shared data-section reader for the DG.
 func (dg *dataGroup) sectionReader() (*datasection.Reader, error) {
 	dg.sectionOnce.Do(func() {
 		if dg.file.finalize {
-			dg.section, dg.sectionErr = datasection.NewFinalizing(dg.file.src, dg.block.Data, dg.file.cfg.cacheSize)
+			dg.section, dg.sectionErr = datasection.NewFinalizing(dg.file.src, dg.block.Data, dg.file.cfg.cacheBytes)
 		} else {
-			dg.section, dg.sectionErr = datasection.New(dg.file.src, dg.block.Data, dg.file.cfg.cacheSize)
+			dg.section, dg.sectionErr = datasection.New(dg.file.src, dg.block.Data, dg.file.cfg.cacheBytes)
 		}
 	})
 	return dg.section, dg.sectionErr

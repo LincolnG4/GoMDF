@@ -58,6 +58,7 @@ type cnSpec struct {
 	next, name, data         int64
 	typ, sync, dtype, bitOff uint8
 	byteOff, bitCount, flags uint32
+	invalPos                 uint32
 }
 
 func (fx *fixture) cn(s cnSpec) int64 {
@@ -66,7 +67,40 @@ func (fx *fixture) cn(s cnSpec) int64 {
 	binary.LittleEndian.PutUint32(data[4:8], s.byteOff)
 	binary.LittleEndian.PutUint32(data[8:12], s.bitCount)
 	binary.LittleEndian.PutUint32(data[12:16], s.flags)
+	binary.LittleEndian.PutUint32(data[16:20], s.invalPos)
 	return fx.block("##CN", []int64{s.next, 0, s.name, 0, 0, s.data, 0, 0}, data)
+}
+
+// setVersion overrides the file version written by newFixture (4.10).
+func (fx *fixture) setVersion(v uint16, s string) {
+	copy(fx.buf[8:16], "        ")
+	copy(fx.buf[8:16], s)
+	binary.LittleEndian.PutUint16(fx.buf[28:30], v)
+}
+
+// ld builds a column-storage list block. sampleOffsets nil means the
+// equal-sample-count variant with the given equal count.
+func (fx *fixture) ld(dv, di []int64, sampleOffsets []uint64, equal uint64) int64 {
+	flags := uint32(0)
+	links := append([]int64{0}, dv...)
+	if di != nil {
+		flags |= 1 << 31
+		links = append(links, di...)
+	}
+	var data []byte
+	if sampleOffsets == nil {
+		flags |= 1 << 0
+		data = make([]byte, 16)
+		binary.LittleEndian.PutUint64(data[8:16], equal)
+	} else {
+		data = make([]byte, 8+8*len(sampleOffsets))
+		for i, o := range sampleOffsets {
+			binary.LittleEndian.PutUint64(data[8+8*i:], o)
+		}
+	}
+	binary.LittleEndian.PutUint32(data[0:4], flags)
+	binary.LittleEndian.PutUint32(data[4:8], uint32(len(dv)))
+	return fx.block("##LD", links, data)
 }
 
 // cg builds a channel group block. links: next, cn_first, acqname, si, sr, md.
@@ -115,4 +149,32 @@ func vlsdStream(values []string) (stream []byte, offsets []uint64) {
 		stream = append(stream, v...)
 	}
 	return stream, offsets
+}
+
+// ca builds a channel array block.
+//
+//	storage 0 = CN template, 1 = CG template, 2 = DG template
+//	dataLinks: ca_data[k] (DG template only)
+//	cycles:    ca_cycle_count[k] (CG/DG template)
+func (fx *fixture) ca(storage uint8, dims []uint64, byteOffBase int32, dataLinks []int64, cycles []uint64) int64 {
+	data := make([]byte, 16+8*len(dims))
+	data[0] = 0 // ca_type: array
+	data[1] = storage
+	binary.LittleEndian.PutUint16(data[2:4], uint16(len(dims)))
+	binary.LittleEndian.PutUint32(data[8:12], uint32(byteOffBase))
+	for i, d := range dims {
+		binary.LittleEndian.PutUint64(data[16+8*i:], d)
+	}
+	for _, c := range cycles {
+		data = binary.LittleEndian.AppendUint64(data, c)
+	}
+	links := append([]int64{0}, dataLinks...) // ca_composition + ca_data
+	return fx.block("##CA", links, data)
+}
+
+// cnComp is cn() with an explicit composition link.
+func (fx *fixture) cnComp(s cnSpec, composition int64) int64 {
+	addr := fx.cn(s)
+	fx.patchLink(addr, 1, composition)
+	return addr
 }

@@ -73,5 +73,5 @@ func (c *Channel) signalDataReader() (*datasection.Reader, error) {
 		}
 		return c.group.dg.deinterleaved(cg.RecordID)
 	}
-	return datasection.New(c.group.file.src, addr, c.group.file.cfg.cacheSize)
+	return datasection.New(c.group.file.src, addr, c.group.file.cfg.cacheBytes)
 }

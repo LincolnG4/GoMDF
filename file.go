@@ -28,8 +28,8 @@ type File struct {
 }
 
 type config struct {
-	noMmap    bool
-	cacheSize int
+	noMmap     bool
+	cacheBytes int64
 }
 
 // OpenOption configures Open.
@@ -40,12 +40,14 @@ type OpenOption func(*config)
 // while open.
 func WithoutMmap() OpenOption { return func(c *config) { c.noMmap = true } }
 
-// WithDecompressCacheSize sets how many decompressed data blocks (up to
-// 4 MiB each) are cached per data section. The default is 8.
-func WithDecompressCacheSize(n int) OpenOption {
+// WithDecompressCacheSize bounds the per-data-section cache of
+// decompressed blocks to n bytes (default 128 MiB). A cache large
+// enough for the compressed groups being worked on makes repeated and
+// windowed reads of compressed files as fast as uncompressed ones.
+func WithDecompressCacheSize(n int64) OpenOption {
 	return func(c *config) {
 		if n > 0 {
-			c.cacheSize = n
+			c.cacheBytes = n
 		}
 	}
 }
@@ -90,7 +92,7 @@ func OpenReader(r io.ReaderAt, size int64, opts ...OpenOption) (*File, error) {
 }
 
 func defaultConfig(opts []OpenOption) config {
-	cfg := config{cacheSize: 8}
+	cfg := config{cacheBytes: 128 << 20}
 	for _, o := range opts {
 		o(&cfg)
 	}
