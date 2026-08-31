@@ -1,6 +1,7 @@
 package mf4
 
 import (
+	"fmt"
 	"os"
 	"sync"
 
@@ -100,6 +101,7 @@ func (f *File) buildChannels(g *ChannelGroup, first int64, parent *Channel) erro
 		}
 		c := &Channel{
 			Type:     ChannelType(cn.Type),
+			cnAddr:   cna,
 			DataType: DataType(cn.DataType),
 			BitCount: cn.BitCount,
 			group:    g,
@@ -149,6 +151,9 @@ func (f *File) buildChannels(g *ChannelGroup, first int64, parent *Channel) erro
 				}
 			case blocks.IDCA:
 				c.IsArray = true
+				if err := f.expandArray(g, c, cn.Composition); err != nil {
+					return err
+				}
 			}
 		}
 		cna = cn.CNNext
@@ -172,4 +177,122 @@ func (f *File) sourceInfo(addr int64) (SourceInfo, error) {
 		return s, err
 	}
 	return s, nil
+}
+
+// expandArray adds one scalar element channel per array element for a
+// channel whose composition is a CA block (or a chain of nested CA
+// blocks) with CN-template storage — the layout used by measurement
+// arrays, maps and classification results. Element channels are named
+// name[i]...[j] (row-major, last dimension fastest), and their byte
+// offsets follow the spec formula: base + sum(index_d * stride_d) with
+// the stride of a level's last dimension equal to that level's
+// ca_byte_offset_base.
+func (f *File) expandArray(g *ChannelGroup, parent *Channel, caAddr int64) error {
+	type dim struct {
+		size      uint64
+		stride    int64
+		invStride uint32
+	}
+	var dims []dim
+	total := uint64(1)
+	for addr := caAddr; addr != 0; {
+		ca, err := blocks.DecodeCA(f.src, addr)
+		if err != nil {
+			return err
+		}
+		if ca.Storage != blocks.CAStorageCNTemplate || len(ca.DimSize) == 0 {
+			return nil // CG/DG-template storage stays a raw byte column
+		}
+		// Within one level: row-major, last dimension has stride
+		// ca_byte_offset_base, earlier dimensions multiply up.
+		stride := int64(ca.ByteOffsetBase)
+		inv := ca.InvalBitPosBase
+		level := make([]dim, len(ca.DimSize))
+		for d := len(ca.DimSize) - 1; d >= 0; d-- {
+			level[d] = dim{size: ca.DimSize[d], stride: stride, invStride: inv}
+			stride *= int64(ca.DimSize[d])
+			inv *= uint32(ca.DimSize[d])
+		}
+		dims = append(dims, level...)
+		for _, dm := range level {
+			total *= dm.size
+			if total == 0 || total > 1<<20 {
+				return nil // degenerate or absurd; keep the raw column only
+			}
+		}
+		if ca.Composition != 0 {
+			id, err := blocks.PeekID(f.src, ca.Composition)
+			if err != nil || id != blocks.IDCA {
+				return err // CN composition below a CA: not expanded
+			}
+		}
+		addr = ca.Composition
+	}
+
+	idx := make([]uint64, len(dims))
+	for k := uint64(0); k < total; k++ {
+		rem := k
+		for d := len(dims) - 1; d >= 0; d-- {
+			idx[d] = rem % dims[d].size
+			rem /= dims[d].size
+		}
+		name := parent.Name
+		byteOff := int64(parent.cn.ByteOffset)
+		invOff := uint32(0)
+		for d, i := range idx {
+			name += fmt.Sprintf("[%d]", i)
+			byteOff += int64(i) * dims[d].stride
+			invOff += uint32(i) * dims[d].invStride
+		}
+		cnCopy := *parent.cn
+		cnCopy.ByteOffset = uint32(byteOff)
+		if cnCopy.Flags&blocks.CNFlagInvalBit != 0 {
+			cnCopy.InvalBitPos = parent.cn.InvalBitPos + invOff
+		}
+		cnCopy.Composition = 0
+		elem := &Channel{
+			Name:       name,
+			Unit:       parent.Unit,
+			Comment:    parent.Comment,
+			Source:     parent.Source,
+			Type:       parent.Type,
+			DataType:   parent.DataType,
+			BitCount:   parent.BitCount,
+			Conversion: parent.Conversion,
+			group:      g,
+			parent:     parent,
+			cn:         &cnCopy,
+			cc:         parent.cc,
+		}
+		g.channels = append(g.channels, elem)
+	}
+	return nil
+}
+
+// fixCycleCounts recomputes each group's record count from the actual
+// data (finalization step for unfinalized files whose cycle counters
+// were never written).
+func (f *File) fixCycleCounts() error {
+	for _, g := range f.groups {
+		recSize := int64(g.cg.RecordSize())
+		if recSize == 0 {
+			continue
+		}
+		if g.dg.block.RecIDSize == 0 {
+			r, err := g.dg.sectionReader()
+			if err != nil {
+				return err
+			}
+			g.RecordCount = uint64(r.Size() / recSize)
+			g.cg.CycleCount = g.RecordCount
+		} else {
+			r, err := g.dg.deinterleaved(g.cg.RecordID)
+			if err != nil {
+				return err
+			}
+			g.RecordCount = uint64(r.Size() / recSize)
+			g.cg.CycleCount = g.RecordCount
+		}
+	}
+	return nil
 }

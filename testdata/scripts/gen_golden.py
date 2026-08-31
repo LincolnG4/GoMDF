@@ -6,6 +6,7 @@ so CI never needs Python:
 
     python3 testdata/scripts/gen_golden.py samples/*.mf4
 """
+import argparse
 import json
 import math
 import sys
@@ -50,11 +51,16 @@ def channel_entry(mdf, group_index, ch):
     return entry
 
 
-def main(paths):
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+def main(paths, out_dir=OUT_DIR):
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     for path in paths:
         path = Path(path)
-        mdf = MDF(path)
+        try:
+            mdf = MDF(path)
+        except Exception as exc:
+            print(f"SKIP {path}: {exc}")
+            continue
         channels = {}
         for gi, group in enumerate(mdf.groups):
             for ch in group.channels:
@@ -63,11 +69,15 @@ def main(paths):
                     channels[key] = channel_entry(mdf, gi, ch)
                 except Exception as exc:  # record why a channel is skipped
                     channels[key] = {"group": gi, "error": str(exc)}
-        out = OUT_DIR / (path.stem + ".json")
+        out = out_dir / (path.stem + ".json")
         out.write_text(json.dumps({"file": path.name, "channels": channels},
                                   indent=1, sort_keys=True))
         print(f"wrote {out}")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or sorted(Path("samples").glob("*.mf4")))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("files", nargs="*")
+    ap.add_argument("-o", "--out", default=str(OUT_DIR))
+    args = ap.parse_args()
+    main(args.files or sorted(Path("samples").glob("*.mf4")), args.out)

@@ -45,12 +45,24 @@ type Reader struct {
 	segs  []segment
 	size  int64
 	cache *lru
+	clamp bool
 }
 
 // New resolves the data section starting at addr. addr == 0 yields an
 // empty reader. cacheSize is the number of decompressed DZ payloads kept.
 func New(src source.Source, addr int64, cacheSize int) (*Reader, error) {
-	r := &Reader{src: src, cache: newLRU(cacheSize)}
+	return newReader(src, addr, cacheSize, false)
+}
+
+// NewFinalizing is New for unfinalized files: a last data block whose
+// stored length overruns the end of the file (finalization flag "update
+// of length for last DT block required") is clamped to the file end.
+func NewFinalizing(src source.Source, addr int64, cacheSize int) (*Reader, error) {
+	return newReader(src, addr, cacheSize, true)
+}
+
+func newReader(src source.Source, addr int64, cacheSize int, clamp bool) (*Reader, error) {
+	r := &Reader{src: src, cache: newLRU(cacheSize), clamp: clamp}
 	if addr == 0 {
 		return r, nil
 	}
@@ -138,16 +150,61 @@ func (r *Reader) resolveDLChain(addr int64) error {
 
 func (r *Reader) addStored(addr, logical int64) error {
 	h, err := blocks.DecodeHeader(r.src, addr, "")
-	if err != nil {
+	if err != nil && r.clamp {
+		if h, err = clampedHeader(r.src, addr); err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
+	}
+	length := int64(h.DataLen())
+	if r.clamp {
+		if max := r.src.Size() - addr - blocks.HeaderSize; length > max {
+			// Block overruns the file: truncated while recording.
+			length = max
+		} else if length == 0 && max > 0 {
+			// Unfinalized logger: the last DT block's length was never
+			// updated and its records run to the end of the file.
+			length = max
+		}
 	}
 	r.segs = append(r.segs, segment{
 		logical: logical,
-		length:  int64(h.DataLen()),
+		length:  length,
 		addr:    addr + blocks.HeaderSize,
 		kind:    segStored,
 	})
 	return nil
+}
+
+// clampedHeader re-reads a block header tolerating a stored length that
+// overruns the file (the unfinalized-file case) by clamping it.
+func clampedHeader(src source.Source, addr int64) (blocks.Header, error) {
+	buf, err := src.Slice(addr, blocks.HeaderSize)
+	if err != nil {
+		return blocks.Header{}, err
+	}
+	h := blocks.Header{
+		ID:        string(buf[0:4]),
+		Length:    le64(buf[8:16]),
+		LinkCount: le64(buf[16:24]),
+	}
+	if h.ID[0] != '#' || h.ID[1] != '#' || h.LinkCount != 0 {
+		return h, fmt.Errorf("invalid data block %q at 0x%x", h.ID, addr)
+	}
+	if max := uint64(src.Size() - addr); h.Length > max {
+		h.Length = max
+	}
+	if h.Length < blocks.HeaderSize {
+		h.Length = blocks.HeaderSize
+	}
+	return h, nil
+}
+
+func le64(b []byte) uint64 {
+	_ = b[7]
+	return uint64(b[0]) | uint64(b[1])<<8 | uint64(b[2])<<16 | uint64(b[3])<<24 |
+		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
 }
 
 func (r *Reader) addZipped(addr, logical int64) error {

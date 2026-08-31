@@ -13,4 +13,9 @@
 //
 // Large files can be read incrementally with ChannelGroup.Chunks or a
 // sample window with WithRange.
+//
+// The package also writes MDF files: Create a Writer, define groups and
+// channels, then stream records (Record/Append — the data-logger path,
+// crash-safe for a single uncompressed group) or write whole columns
+// (AppendColumns). Close finalizes the file.
 package mf4

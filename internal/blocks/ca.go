@@ -9,10 +9,12 @@ const (
 	CAStorageDGTemplate = 2
 )
 
-// CA is a channel array block. Only the fixed part is decoded; array
-// composition is not resolved yet — channels with a CA composition are
-// exposed as raw byte arrays by the public API.
+// CA is a channel array block. The fixed part and the composition link
+// are decoded; axis links are not resolved.
 type CA struct {
+	// Links
+	Composition int64 // ca_composition: nested CA (or CN structure)
+
 	Type            uint8    // ca_type
 	Storage         uint8    // ca_storage
 	NDim            uint16   // ca_ndim
@@ -30,6 +32,7 @@ func DecodeCA(src source.Source, addr int64) (*CA, error) {
 	}
 	d := r.data
 	b := &CA{
+		Composition:     r.link(0),
 		Type:            d[0],
 		Storage:         d[1],
 		NDim:            le.Uint16(d[2:4]),

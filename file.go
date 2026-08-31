@@ -19,6 +19,9 @@ type File struct {
 
 	id *blocks.ID
 	hd *blocks.HD
+	// finalize marks an unfinalized file whose finalization steps are
+	// applied in memory while reading.
+	finalize bool
 
 	groups   []*ChannelGroup
 	channels []*Channel // flattened, in file order
@@ -102,16 +105,34 @@ func newFile(src source.Source, cfg config) (*File, error) {
 	if id.Version < 400 {
 		return nil, fmt.Errorf("%w: version %d", ErrNotMDF4, id.Version)
 	}
+	finalize := false
 	if id.Unfinalized() {
-		return nil, fmt.Errorf("%w (flags 0x%x)", ErrUnfinalized, id.UnfinalizedFlags)
+		// Standard finalization steps this reader can apply in memory:
+		//   bit 0: update cycle counters for CG/CA (recomputed from data)
+		//   bit 1: update cycle counters for SR (SR data not exposed)
+		//   bit 2: update length of last DT block (clamped to file end)
+		//   bit 3: update length of last RD block (RD data not exposed)
+		//   bit 5: update VLSD CG data bytes (not used by this reader)
+		// Files needing DL updates (bit 4) or VLSD offset rewrites
+		// (bit 6), or with custom flags, cannot be read safely.
+		const fixable = 1<<0 | 1<<1 | 1<<2 | 1<<3 | 1<<5
+		if id.CustomUnfinFlags != 0 || id.UnfinalizedFlags&^uint16(fixable) != 0 {
+			return nil, fmt.Errorf("%w (flags 0x%x, custom 0x%x)", ErrUnfinalized, id.UnfinalizedFlags, id.CustomUnfinFlags)
+		}
+		finalize = true
 	}
 	hd, err := blocks.DecodeHD(src, blocks.IDSize)
 	if err != nil {
 		return nil, err
 	}
-	f := &File{src: src, cfg: cfg, id: id, hd: hd}
+	f := &File{src: src, cfg: cfg, id: id, hd: hd, finalize: finalize}
 	if err := f.buildTree(); err != nil {
 		return nil, err
+	}
+	if finalize && id.UnfinalizedFlags&1 != 0 {
+		if err := f.fixCycleCounts(); err != nil {
+			return nil, err
+		}
 	}
 	return f, nil
 }

@@ -154,6 +154,7 @@ type Channel struct {
 	group  *ChannelGroup
 	parent *Channel // enclosing structure channel, if a component
 	cn     *blocks.CN
+	cnAddr int64
 	cc     *blocks.CC
 
 	convOnce sync.Once

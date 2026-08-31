@@ -13,13 +13,21 @@ for building tools (viewers, exporters) on top of it.
   chunk for progressive loading.
 - **Robust**: no panics on malformed files (fuzz-tested); errors carry the
   block type and file offset.
+- **Writes MDF files too**: a streaming writer for data loggers (bounded
+  memory, crash-safe unfinalized layout, `Flush()` durability points) and
+  a batch column API for exports, with optional DZ compression.
 - Supports sorted and unsorted files, compressed data (DZ deflate +
   transposition), data lists (DL/HL), variable-length data (VLSD/SD),
-  invalidation bits, non-byte-aligned integer channels, and the full set
-  of conversion rules (linear, rational, algebraic formulas, value/range
-  tables, text tables).
+  invalidation bits, non-byte-aligned integer channels, channel-array
+  (CA) element expansion, the channel hierarchy (CH) tree, unfinalized
+  logger files (standard finalization steps applied in memory), and the
+  full set of conversion rules (linear, rational, algebraic formulas,
+  value/range tables, text tables).
 
-Values are cross-validated against [asammdf](https://github.com/danielhrisca/asammdf).
+The reader is validated against the official ASAM MDF 4.2 example suite
+(97/97 files) and cross-checked value-by-value against
+[asammdf](https://github.com/danielhrisca/asammdf); written files are
+verified to read back identically in asammdf.
 
 ## Install
 
@@ -80,11 +88,57 @@ See `examples/mdf-reader` for a complete program.
 | `mf4.WithRange(from, n)` | sample window |
 | `mf4.WithChunkSamples(n)` | chunk size for `Chunks` |
 
+## Writing
+
+```go
+w, _ := mf4.Create("drive.mf4")            // add mf4.WithCompression() for DZ
+eng, _ := w.NewGroup("Engine")             // gets a float64 "t" master at index 0
+spd  := eng.Float64("EngineSpeed", "rpm")
+gear := eng.Int("Gear", "", 8)
+adc  := eng.Uint("RawADC", "V", 16)
+eng.SetLinearConversion(adc, 0, 0.001)     // phys = 0.001 * raw
+msg  := eng.String("Message")              // VLSD text channel
+
+rec := eng.Record()                        // reusable, allocation-free
+for running {
+    rec.SetFloat64(0, tSeconds)
+    rec.SetFloat64(spd, speed)
+    rec.SetInt(gear, g)
+    rec.SetUint(adc, raw)
+    rec.SetString(msg, note)
+    eng.Append(rec)
+    // w.Flush() at checkpoints: the file on disk is readable even if
+    // power is lost before Close (unfinalized-MDF logger layout).
+}
+w.Close()                                  // finalizes the file
+```
+
+Batch data goes through `AppendColumns`:
+
+```go
+g.AppendColumns(n, mf4.Column{Ch: 0, F: timestamps},
+                   mf4.Column{Ch: temp, F: values})
+```
+
+Layout is picked automatically: one group without compression streams
+into a single growing data block (crash-safe); several groups or
+compression produce a sorted multi-group file with per-group chunked
+data lists. Streaming throughput is on the order of tens of millions of
+records per second.
+
 ## Not supported yet
 
 - MDF 4.2 column-oriented storage (`##LD`/`##DV`) — returns `ErrUnsupported`
-- Channel array (`##CA`) composition — exposed as raw byte columns
-- Writing files (the block layer is structured to support it later)
+- CA arrays with CG/DG-template storage (CN-template arrays, the common
+  case, are expanded into `name[i][j]` element channels)
+- Bus-signal decoding (CAN/LIN payload extraction via DBC-style signal
+  descriptions) — the frame channels themselves read fine
+- Writer: invalidation bits, attachments, events, non-linear conversions
+
+Known divergences from asammdf (GoMDF follows the spec): UTF-16 string
+channels are actually decoded; range-to-scale partial conversions use
+the spec's `min <= v < max` matching for any sample count; CA element
+byte offsets follow the spec formula (verified against raw records).
 
 ## Testing
 

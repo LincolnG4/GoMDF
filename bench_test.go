@@ -102,3 +102,37 @@ func FuzzOpen(f *testing.F) {
 		file.Close()
 	})
 }
+
+func benchWriter(b *testing.B, opts ...mf4.WriterOption) {
+	b.Helper()
+	path := b.TempDir() + "/bench.mf4"
+	w, err := mf4.Create(path, opts...)
+	if err != nil {
+		b.Fatal(err)
+	}
+	g, _ := w.NewGroup("Bench")
+	c1 := g.Float64("Speed", "rpm")
+	c2 := g.Float32("Torque", "Nm")
+	c3 := g.Int("Gear", "", 8)
+	c4 := g.Uint("Flags", "", 32)
+	rec := g.Record()
+	b.SetBytes(int64(8 + 8 + 4 + 1 + 4)) // record bytes
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rec.SetFloat64(0, float64(i)*0.001)
+		rec.SetFloat64(c1, float64(i))
+		rec.SetFloat64(c2, float64(i)*0.5)
+		rec.SetInt(c3, int64(i%8))
+		rec.SetUint(c4, uint64(i))
+		if err := g.Append(rec); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	if err := w.Close(); err != nil {
+		b.Fatal(err)
+	}
+}
+
+func BenchmarkWriteRecords(b *testing.B)           { benchWriter(b) }
+func BenchmarkWriteRecordsCompressed(b *testing.B) { benchWriter(b, mf4.WithCompression()) }

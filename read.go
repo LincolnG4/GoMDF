@@ -291,7 +291,11 @@ func (g *ChannelGroup) recordSource() (*datasection.Reader, error) {
 // sectionReader lazily builds the shared data-section reader for the DG.
 func (dg *dataGroup) sectionReader() (*datasection.Reader, error) {
 	dg.sectionOnce.Do(func() {
-		dg.section, dg.sectionErr = datasection.New(dg.file.src, dg.block.Data, dg.file.cfg.cacheSize)
+		if dg.file.finalize {
+			dg.section, dg.sectionErr = datasection.NewFinalizing(dg.file.src, dg.block.Data, dg.file.cfg.cacheSize)
+		} else {
+			dg.section, dg.sectionErr = datasection.New(dg.file.src, dg.block.Data, dg.file.cfg.cacheSize)
+		}
 	})
 	return dg.section, dg.sectionErr
 }
